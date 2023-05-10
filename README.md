@@ -24,8 +24,8 @@ Since our repo is private, we need to setup a ssh key for GitHub. [Here](https:/
 
 Then, clone the repo:
 ```
-git clone git@github.com:simon71701/Tau3MuGNNs_newdata.git
-cd Tau3MuGNNs_newdata/
+git clone git@github.com:simon71701/Tau3MuGNNs.git
+cd Tau3MuGNNs
 ```
 
 
