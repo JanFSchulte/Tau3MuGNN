@@ -1,5 +1,5 @@
 # Tau3MuGNNs
-This repo is to reproduce the results of the Tau3MuGNNs.
+This repo is to reproduce the results of Tau3MuGNNs project. Created by Siqi Miao (Georgia Tech) and updated by Benjamin Simon (Purdue).
 
 # Use Gilbreth
 ## 0. connect VPN
@@ -48,36 +48,23 @@ conda activate tau3mu
 ```
 
 Install dependencies:
-```
-conda install -y pytorch=1.10.0 torchvision cudatoolkit=11.3 -c pytorch
-pip install torch-scatter==2.0.9 torch-sparse==0.6.12 torch-cluster==1.5.9 torch-spline-conv==1.2.1 torch-geometric==2.0.3 -f https://data.pyg.org/whl/torch-1.10.0+cu113.html
-pip install -r requirements.txt
-```
 
-In case a lower CUDA version is required, please use the following command to install dependencies:
 ```
 conda install -y pytorch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0 cudatoolkit=10.2 -c pytorch
 pip install torch-scatter==2.0.9 torch-sparse==0.6.12 torch-cluster==1.5.9 torch-spline-conv==1.2.1 torch-geometric==2.0.3 -f https://data.pyg.org/whl/torch-1.9.0+cu102.html
 pip install -r requirements.txt
 ```
 
-For plotting with ROOT, we need to create a separate conda environment.
-```
-conda create --name tau3mu_plotting -c conda-forge ROOT
-conda activate tau3mu_plotting
-pip install numpy pandas
-```
-
 # Get the data
 To run the code, we need to put those `.pkl` files in the right place.
 
-Specifically, one has to put `DsTau3muPU0_MTD.pkl`, `DsTau3muPU200_MTD.pkl`, `MinBiasPU200_MTD.pkl` under `$ProjectDir/data/raw`. When running the code, those dataframes will be processed according to the specific setting, and the processed files will be saved under `$ProjectDir/data/processed-[setting]-[cut_id]`. In this project, for simplicity I call `SignalPU0, SignalPU200, BkgPU200` as `pos0, pos200, neg200` respectively.
+When running the code, those dataframes will be processed according to the specific setting, and the processed files will be saved under `$ProjectDir/data/processed-[setting]-[cut_id]`. In this project, for simplicity we call them `SignalPU0, SignalPU200, BkgPU200` as `pos0, pos200, neg200` respectively.
 
 Please note that the processed files may take up lots of disk space (5 gigabytes+), and when processing them it may also take up lots of memory (10 gigabytes+).
 
 # Train a model
 
-I provide `8` settings for training GNNs, and the corresponding configurations can be found in `$ProjectDir/src/configs/`. To train a GNN with a specific setting, one can do:
+We provide `8` settings for training GNNs, and the corresponding configurations can be found in `$ProjectDir/src/configs/`. To train a GNN with a specific setting, one can do:
 
 ```
 cd ./src
@@ -87,27 +74,13 @@ python train_gnn.py --setting [setting_name] --cuda [GPU_id] --cut [cut_id]
 `GPU_id` is the id of the GPU to use. To use CPU, please set it to `-1`. `cut_id` is the id of the cut to use. Its default value is `None` and can be set to `cut1` or `cut1+2`. Note that when some cut is used, the `pos_neg_ratio` may need to be adjusted because many positive samples will be dropped.
 
 
-The `setting_name` can be chosen from the following settings:
-| setting_name | Description |
-| ------------ | ----------- |
-| GNN_full_dR_1 | (1) full detector; (2) construct graphs based on dR; (3) use hits from station 1 (current best setting)|
-| GNN_full_dR_2 | (1) full detector; (2) construct graphs based on dR; (3) use hits from station 1 & 2  |
-| GNN_full_dR_4 | (1) full detector; (2) construct graphs based on dR; (3) use hits from station 1 & 2 & 3 & 4  |
-| GNN_full_FC_1 | (1) full detector; (2) construct fully-connected (complete) graphs; (3) use hits from station 1 |
-| GNN_full_dR_1_mix | (1) full detector; (2) construct graphs based on dR; (3) use hits from station 1; (4) positive samples: construct a sample by mixing signal hits from a SignalPU0 sample and background hits from a BkgPU200 sample, negative samples: BkgPU200 |
-| GNN_full_dR_1_mix_check | (1) full detector; (2) construct graphs based on dR; (3) use hits from station 1; (4) positive samples: construct a sample by mixing signal hits from a SignalPU0 sample and background hits from a BkgPU200 sample, negative samples: SignalPU200 |
-| GNN_half_dR_1 | (1) half detector; (2) construct graphs based on dR; (3) use hits from station 1 |
-| GNN_half_dR_1_check | (1) half detector; (2) construct graphs based on dR; (3) use hits from station 1; (4) positive samples: non-tau endcap in SignalPU200, negative samples: BkgPU200 (half detector) |
-
-We provide detailed documentation for each option in the setting in `./src/configs/GNN_full_dR_1.yml`. One can play with those options and try new settings.
-
-One thing to notice is that if you have had processed files for a specific setting, even then you change some options in the config file, the processed files will not be changed in the next run. So, if you want to change the options in a config file, you need to delete the corresponding processed files first. This is because the code will search `.pt` files given the `setting_name`; if it finds any `.pt` files under `$ProjectDir/data/processed-[setting_name]-[cut_id]`, it will assume that the processed files for the specified setting are already there and will not re-process data with the new options.
+One thing to notice is that if you have had processed files for a specific setting, even then you change some data-options in the config file, the processed files will not be changed in the next run. So, if you want to change the data-options in a config file, you need to delete the corresponding processed files first. This is because the code will search `.pt` files given the `setting_name`; if it finds any `.pt` files under `$ProjectDir/data/processed-[setting_name]-[cut_id]`, it will assume that the processed files for the specified setting are already there and will not re-process data with the new options. If you've only changed options under 'model' or 'optimizer', you do you need to delete the processed files.
 
 # Workflow of the code
 
-1. Class `Tau3MuDataset` in `$ProjectDir/src/utils/dataset` is used to build datasets that can be used to train pytorch models. The code will first call this class to process dataframes, including graph building, node/edge feature generations, dataset splits, etc. After this process, the fully processed data shall be saved on the disk.
+1. Class `Tau3MuDataset` in `$ProjectDir/src/utils/dataset_splitz` is used to build datasets that can be used to train pytorch models. The code will first call this class to process dataframes, including graph building, node/edge feature generations, dataset splits, etc. After this process, the fully processed data shall be saved on the disk.
 
-2. Then the model will be trained by the class `Tau3MuGNNs` in `train_gnn.py`, and during the training some metrics will show on the progress bar.
+2. Then the model will be trained by the class `Tau3MuGNNs` in `train_gnn_parallel.py`, and during the training some metrics will show on the progress bar. Currently, the model must be run with 2 gpus available. This will be fixed in the near-future.
 
 3. The trained model will be saved into `$ProjectDir/data/logs/[time_step-setting_name-cut_id]/model.pt`, where `[time_step-setting_name-cut_id]` is the log id for this model and will be needed to load the model later.
 
@@ -115,64 +88,5 @@ One thing to notice is that if you have had processed files for a specific setti
 # Training Logs
 Standard output provides basic training logs, while more detailed logs and interpretation visualizations can be found on tensorboard:
 ```
-tensorboard --logdir=$ProjectDir/data/logs
-```
-
-In case you are using Gilbreth, you can use the following command to open tensorboard:
-```
-unset PYTHONPATH
-tensorboard --logdir=$ProjectDir/data/logs --bind_all
-```
-
-# Convert New Dataset to Pandas
-
-With 'DSTau3Mu_pCut1GeV.pkl' in the current working directory, run
-```
-source ~/.bashrc
-conda activate tau3mu
-python newdata2pandas.py
-```
-The converted dataset will have the filename 'DSTau3Mu_pCut1GeV_DF.pkl'
-
-# Apply Same-Phase Cuts
-
-To apply same-phase cuts, run
-```
-source ~/.bashrc
-conda activate tau3mu
-python apply_fullselection.py --dataset={Path_To_Dataset}
-```
-This will save a copy of the cut dataset to the same directory as the given dataset.
-
-# File Structure
-
-```
-.
-├── data
-│   ├── logs                                # logs for training models
-│   ├── raw                                 # store raw .pkl files
-│   ├── scores                              # store inference scores
-│   ├── processed-GNN_full_dR_1-cut1        # store processed files for each setting
-│   ├── processed-GNN-full_dR_2-cut1+2      # store processed files for each setting
-│   └── ...
-├── README.md
-├── requirements.txt
-└── src
-    ├── train_gnn.py                        # train GNNs
-    ├── desicion_tree.ipynb                 # train a decision tree
-    ├── configs                             # configs for different settings
-    │   ├── GNN_full_dR_1.yml
-    │   ├── GNN_full_dR_2.yml
-    │   └── ...
-    ├── models
-    │   ├── __init__.py
-    │   ├── gen_conv.py                     # define GNN conv layers
-    │   └── model.py                        # define GNN models
-    └── utils
-        ├── __init__.py
-        ├── dataset.py                      # dataset class
-        ├── logger.py                       # logger functions
-        ├── loss.py                         # loss functions
-        ├── root2df.py                      # convert root file to dataframe
-        └── utils.py                        # utility functions
+python -m tensorboard.main dev upload --logdir=$LogDir
 ```
