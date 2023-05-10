@@ -124,12 +124,6 @@ class Tau3MuGNNs:
                 
                 self.writer.add_histogram(f'{phase}/Signal_Predictions', all_clf_logits[signal_mask].sigmoid(),epoch)
                 self.writer.add_histogram(f'{phase}/Bkg_Predictions', all_clf_logits[bkg_mask].sigmoid(),epoch)
-                #self.writer.add_histogram('Node Encoder Weights', self.model.node_encoder.weight, epoch)
-                #self.writer.add_histogram('Edge Encoder Weights', self.model.edge_encoder.weight, epoch)
-                #self.writer.add_histogram('First Conv Layer Weights', self.model.convs[0].weight, epoch)
-                #self.writer.add_histogram('Last Conv Layer Weights', self.model.convs[-1].weight, epoch)
-                #self.writer.add_histogram('Linear Output Weights', self.model.fc_out.weight, epoch)
-
                 
             pbar.set_description(desc)
 
