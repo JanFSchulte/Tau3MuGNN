@@ -1,0 +1,61 @@
+data:
+  data_dir: ../data
+  log_dir: ../data/normed_data_logs
+  signal_dataset: 'DSTau3Mu_pCut1GeV_DF_2pCut2.5GeV_etaCut28_500000.pkl'
+  bkg_dataset: 'MinBiasPU200_MTD.pkl'
+  add_self_loops: True
+  only_one_tau: True
+  splits:
+    train: 0.7
+    valid: 0.15
+    test: 0.15
+  pos_neg_ratio: 0.08610588470776621
+  radius: 1.0
+  node_clf: False
+  virtual_node: True
+  phi_transform: False
+  far_station: False
+  
+
+  conditions:
+    1-mu_hit_station: '<=3'
+    2-mu_hit_neighbor: '==0'
+    3-mu_hit_type: '!=0'
+
+  node_feature_names:
+    - mu_hit_sim_z
+    - mu_hit_sim_eta
+    - mu_hit_bend
+    - mu_hit_sim_r
+  edge_feature_names:
+    - mu_hit_sim_z
+    - mu_hit_sim_eta
+    - mu_hit_bend
+    - mu_hit_sim_phi
+    - mu_hit_sim_r
+
+model:
+  bn_input: True
+  n_layers: 6
+  out_channels: 128
+  dropout_p: 0.1
+  readout: pool
+  norm_type: batch
+  deepgcn_aggr: softmax
+  conv_type: GENConv
+  skip_num: 1
+  edge_atten: False
+  endcap: -1
+  
+eval:
+  test_interval: 5
+  auroc_max_fpr: 0.001
+
+optimizer:
+  resume: False
+  lr: 1.0e-3
+  batch_size: 1024
+  epochs: 200
+  focal_loss: True
+  focal_alpha: 0.4
+  focal_gamma: 0.
