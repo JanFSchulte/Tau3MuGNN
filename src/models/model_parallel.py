@@ -24,8 +24,7 @@ class Model(nn.Module):
         self.conv_type = model_config['conv_type']
         self.skip_num = model_config['skip_num']
         self.topk = model_config.get('topk', False)
-        self.edge_atten = model_config.get('edge_atten', False)
-        self.phi_invar = model_config.get('phi_invar', False)
+        self.edge_atten = model_config.get('edge_atten', False) # Additional learned parameters for weighting edge features during message passing
         
         self.convs = nn.ModuleList()
         self.mlps = nn.ModuleList()
@@ -35,19 +34,14 @@ class Model(nn.Module):
             assert self.skip_num == 1
             self.topk_layers = nn.ModuleList()
         
-        channels = [self.out_channels, self.out_channels*2, self.out_channels]
+        channels = [self.out_channels, self.out_channels*2, self.out_channels] # Dimensions of the MLPs in the hidden layers. Number of layers in MLP = len(channels)
         
         #self.input_drop = nn.Dropout(.1)
         
-        #self.node_encoder = nn.Linear(x_dim, self.out_channels)
-        #self.edge_encoder = nn.Linear(edge_attr_dim, self.out_channels)
-        
-        self.node_encoder = Encoder(x_dim, self.out_channels)
-        #self.node_encoder = GAT(x_dim, hidden_channels=64, num_layers=3, out_channels=self.out_channels, edge_dim=edge_attr_dim)
+        self.node_encoder = Encoder(x_dim, self.out_channels) 
         
         self.edge_encoder = Encoder(edge_attr_dim, self.out_channels)
 
-        
         if self.bn_input:
             self.bn_node_feature = nn.BatchNorm1d(self.out_channels)
             self.bn_edge_feature = nn.BatchNorm1d(self.out_channels)
@@ -79,7 +73,7 @@ class Model(nn.Module):
                 self.convs.append(ChebConv(self.out_channels, self.out_channels, K=1))
                 self.mlps.append(MLP(channels, norm_type=self.norm_type, dropout=self.dropout_p))
                 
-        else:
+        else: # GENConv
             for _ in range(self.n_layers):
                 self.convs.append(GENConv(self.out_channels, self.out_channels, aggr=self.deepgcn_aggr, learn_t=True, learn_p=True, edge_atten=self.edge_atten))
                 self.mlps.append(MLP(channels, norm_type=self.norm_type, dropout=self.dropout_p))
@@ -109,16 +103,14 @@ class Model(nn.Module):
         #self.node_clf_out = nn.Linear(self.out_channels, 1)
 
     def forward(self, data, edge_atten=None, node_atten=None, node_clf=False):
-        x, edge_index, edge_attr, batch, ptr = data.x, data.edge_index, data.edge_attr, data.batch, data.ptr
+        x, edge_index, edge_attr, batch, ptr = data.x, data.edge_index, data.edge_attr, data.batch, data.ptr # Unpack element of DataListParallel
         
         v_idx, v_emb = (ptr[1:] - 1, []) if self.virtual_node else (None, None)
         #x = self.input_drop(x)
         #edge_attr = self.input_drop(edge_attr)
-        if self.phi_invar:
-            x[:,self.phi_invar] += (torch.rand(x.size()[0])*(2*np.pi)).to(x.device)
         
-        x = self.node_encoder(x, batch)
-        edge_attr = self.edge_encoder(edge_attr, batch)
+        x = self.node_encoder(x, batch) # Encode node features
+        edge_attr = self.edge_encoder(edge_attr, batch) # Encode edge features
     
         if node_atten is not None:
             assert edge_atten is not None
@@ -129,34 +121,24 @@ class Model(nn.Module):
             x = self.bn_node_feature(x)
             edge_attr = self.bn_edge_feature(edge_attr)
         
-        stored_embs = [x]
+        stored_embs = [x] # Store embeddings for residual/skip connections
         for i in range(self.n_layers):
             j = i+1 # for indexing stored_embs
             if i < self.skip_num:
                 skip = sum(stored_embs[:j])
-                
-                #print(0, j)
-                #print(len(stored_embs[:j]))
             else:
                 skip = sum(stored_embs[j-self.skip_num:j])
-                #print(j-self.skip_num, j)
-                #print(len(stored_embs[j-self.skip_num:j]))
-                
-            #if i == 0:
-            #    skip = stored_embs[i]
-            #else:
-            #    skip = stored_embs[i] + stored_embs[i-1]
             
-            if self.conv_type in ['MFConv', 'LEConv', 'ChebConv']:
+            if self.conv_type in ['MFConv', 'LEConv', 'ChebConv']: # No edge features
                 x = self.convs[i](x, edge_index)
                 x = self.mlps[i](x, batch)
-            elif self.conv_type == 'PANConv':
+            elif self.conv_type == 'PANConv': # No edge features
                 x = self.convs[i](x, edge_index)[0]
                 x = self.mlps[i](x, batch)
-            else:
-                x = self.convs[i](x, edge_index, edge_attr=edge_attr)
-                x = self.mlps[i](x, batch)
-                edge_attr = self.edge_updaters[i](edge_attr, batch)
+            else: # Use edge features
+                x = self.convs[i](x, edge_index, edge_attr=edge_attr) # Update node embeddings with message passing
+                x = self.mlps[i](x, batch) # Update node embeddings with MLP
+                edge_attr = self.edge_updaters[i](edge_attr, batch) # Update edge embeddings with MLP
                 
             if self.virtual_node:
                 if i == 0 and self.readout != 'pool':
@@ -166,7 +148,7 @@ class Model(nn.Module):
                 elif self.readout == 'jknet':
                     v_emb.append(x[v_idx])
                     
-            x += skip
+            x += skip # Residual/skip connection
             if self.topk:
                 x, edge_index, edge_attr, batch, _, _ = self.topk_layers[i](x, edge_index, edge_attr=edge_attr, batch=batch)
             
@@ -253,7 +235,7 @@ class MLP(BatchSequential):
         super(MLP, self).__init__(*m)
 
 
-class Encoder(BatchSequential):
+class Encoder(BatchSequential): # MLP for node/edge encoding
     def __init__(self, in_channels, out_channels, n_layers=3, dropout=0, bias=True):
 
         m = []
@@ -271,7 +253,7 @@ class Encoder(BatchSequential):
         super(Encoder, self).__init__(*m)
 
 
-class Out(BatchSequential):
+class Out(BatchSequential): # MLP for output
     def __init__(self, in_channels, out_channels, n_layers=3, dropout=0, bias=True):
         
         m = []
