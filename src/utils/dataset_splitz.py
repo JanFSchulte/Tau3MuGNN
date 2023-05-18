@@ -126,18 +126,25 @@ class Tau3MuDataset(InMemoryDataset):
         global neg_maxs
         global neg_mins
         
-        pos_maxs = [[] for feature in np.unique(self.node_feature_names+self.edge_feature_names)]
-        pos_mins = [[] for feature in np.unique(self.node_feature_names+self.edge_feature_names)]
+        self.feature_names = list(np.unique(self.node_feature_names+self.edge_feature_names))
         
-        neg_maxs = [[] for feature in np.unique(self.node_feature_names+self.edge_feature_names)]
-        neg_mins = [[] for feature in np.unique(self.node_feature_names+self.edge_feature_names)]
+        for name in ['mu_hit_nlog_eta', 'mu_hit_nlog_phi']:
+            if name in self.feature_names:
+                self.feature_names.remove(name)
         
-        print(np.unique(self.node_feature_names+self.edge_feature_names))
+        pos_maxs = [[] for feature in self.feature_names]
+        pos_mins = [[] for feature in self.feature_names]
+        
+        neg_maxs = [[] for feature in self.feature_names]
+        neg_mins = [[] for feature in self.feature_names]
+        
+        
+        #self.feature_names = np.array(feature_names)
         endcaps = df['mu_hit_endcap'].to_numpy()
         
         for i in range(len(df)):
             event = df.iloc[i]
-            for j,feature in enumerate(np.unique(self.node_feature_names+self.edge_feature_names)):
+            for j,feature in enumerate(self.feature_names):
                 var = event[feature]
                 endcaps = np.sign(event['mu_hit_sim_z'])
                 
@@ -216,7 +223,7 @@ class Tau3MuDataset(InMemoryDataset):
         if 'GNN' in self.setting:
             edge_index = Tau3MuDataset.build_graph(entry, self.add_self_loops, self.radius, self.virtual_node, self.eta_thresh, self.knn, self.knn_inter)
             
-            for i, feature in enumerate(np.unique(self.node_feature_names+self.edge_feature_names)):
+            for i, feature in enumerate(self.feature_names):
                 entry[feature] = (entry[feature] - mins[i]) / (maxs[i] - mins[i])
             
             
