@@ -25,7 +25,7 @@ from torch_geometric.loader import DataLoader, DataListLoader
 
 
 class Tau3MuDataset(InMemoryDataset):
-    def __init__(self, setting, data_config, endcap, debug=False):
+    def __init__(self, setting, data_config, endcap, debug=False): # Instantiate relevant variables
         self.setting = setting
         self.data_dir = Path(data_config['data_dir'])
         self.conditions = data_config['conditions']
@@ -41,7 +41,7 @@ class Tau3MuDataset(InMemoryDataset):
         self.n_hits_min = data_config.get('n_hits_min', 1)
         self.n_hits_max = data_config.get('n_hits_max', np.inf)
         
-        global signal_dataset
+        global signal_dataset ## TODO: Figure out a way to not require these being global variables
         global bkg_dataset
         global far_station
         
@@ -49,13 +49,13 @@ class Tau3MuDataset(InMemoryDataset):
         bkg_dataset = data_config['bkg_dataset']
         far_station = data_config.get('far_station', False)
         
-        if type(self.radius) != list:
+        if type(self.radius) != list: # If radius is a list, it will apply a different dR cutoff at each station
             self.radius = [self.radius for i in range(4)]
         
         self.eta_thresh = data_config.get('eta_thresh', False) 
         
         if type(self.eta_thresh) != list:
-            self.eta_thresh = [self.eta_thresh for i in range(3)]
+            self.eta_thresh = [self.eta_thresh for i in range(3)] # If eta_thresh is a list, it will apply a different threshold between 1-2, 2-3, and 3-4
             
         self.virtual_node = data_config.get('virtual_node', False)
         self.cut = data_config.get('cut', False)
@@ -92,12 +92,13 @@ class Tau3MuDataset(InMemoryDataset):
     def process(self):
         df = self.get_df()
         
-        df = df.sample(frac=1, random_state=42).reset_index(drop=False)
-        df = df.rename(columns={'index': 'og_index'})
+        df = df.sample(frac=1, random_state=42).reset_index(drop=False) # Shuffle the dataset. Set seed to make results reproducible
+        df = df.rename(columns={'index': 'og_index'}) # Store the indices of the original dataset for prediction analysis
         
         if self.debug:
             df = df.iloc[:100]
         
+        # Add phi transformations
         r_copy = df['mu_hit_sim_r'].to_numpy()
         phi_copy = df['mu_hit_sim_phi'].to_numpy()
         cos = []
@@ -121,6 +122,7 @@ class Tau3MuDataset(InMemoryDataset):
         df['mu_hit_sim_x'] = x
         df['mu_hit_sim_y'] = y
         
+        # TODO: Figure out how to not require these to be global.
         global pos_maxs
         global pos_mins
         global neg_maxs
@@ -128,9 +130,11 @@ class Tau3MuDataset(InMemoryDataset):
         
         self.feature_names = list(np.unique(self.node_feature_names+self.edge_feature_names))
         
-        for name in ['mu_hit_nlog_eta', 'mu_hit_nlog_phi']:
+        for name in ['mu_hit_nlog_eta', 'mu_hit_nlog_phi', 'mu_hit_dist', 'mu_hit_dot']:
             if name in self.feature_names:
                 self.feature_names.remove(name)
+        
+        # Need separate mins/maxs for each endcap
         
         pos_maxs = [[] for feature in self.feature_names]
         pos_mins = [[] for feature in self.feature_names]
@@ -169,11 +173,6 @@ class Tau3MuDataset(InMemoryDataset):
         pos_mins = np.min(pos_mins, axis=1)
         neg_mins = np.array(neg_mins)
         neg_mins = np.min(neg_mins, axis=1)
-
-        print(pos_maxs)
-        print(pos_mins)
-        print(neg_maxs)
-        print(neg_mins)
         
         pos_data_list = []
         neg_data_list = []
@@ -182,13 +181,13 @@ class Tau3MuDataset(InMemoryDataset):
         
         for entry in tqdm(df.itertuples(), total=len(df)):
             masked_entry = Tau3MuDataset.mask_hits(entry, self.conditions, n_hits_min=self.n_hits_min)
-            if masked_entry == None:
+            if masked_entry == None: # Don't use events that don't have any hits left after the mask is applied
                 continue
             
             for i, endcap in enumerate([1,-1]):
                 if 'half' in self.setting:
                     entry = Tau3MuDataset.split_endcap(masked_entry, endcap)
-                    if entry == None:
+                    if entry == None: # Don't use an endcap that is empty
                         continue
                     else:
                         # half-detector, tau and non-tau endcap
@@ -221,9 +220,9 @@ class Tau3MuDataset(InMemoryDataset):
             mins = neg_mins
         
         if 'GNN' in self.setting:
-            edge_index = Tau3MuDataset.build_graph(entry, self.add_self_loops, self.radius, self.virtual_node, self.eta_thresh, self.knn, self.knn_inter)
+            edge_index = Tau3MuDataset.build_graph(entry, self.add_self_loops, self.radius, self.virtual_node, self.eta_thresh, self.knn, self.knn_inter) # Construct graph before min-max norm
             
-            for i, feature in enumerate(self.feature_names):
+            for i, feature in enumerate(self.feature_names): # Min-max norm
                 entry[feature] = (entry[feature] - mins[i]) / (maxs[i] - mins[i])
             
             
@@ -297,7 +296,7 @@ class Tau3MuDataset(InMemoryDataset):
         pos200 = dfs[self.raw_file_names[0].strip('.pkl')]
         pos0 = dfs.get('DsTau3muPU0_MTD', None)
         
-        assert self.only_one_tau
+        assert self.only_one_tau # Only one-tau is supported
         if self.only_one_tau:
             pos200 = pos200[pos200.n_gen_tau == 1].reset_index(drop=True)
             if pos0 is not None:
@@ -403,14 +402,11 @@ class Tau3MuDataset(InMemoryDataset):
     @staticmethod
     def get_inter_station_edges(entry, hit_ids, eta_thresh, knn_inter=False):
         # hit_ids: ([idxs of hits in station 1, idxs of hits in station 2, ...])
-        #edge_index = list(product(hit_ids[0], hit_ids[1])) + list(product(hit_ids[1], hit_ids[0]))
+        # edge_index = list(product(hit_ids[0], hit_ids[1])) + list(product(hit_ids[1], hit_ids[0]))
         
         if eta_thresh:
             station0_coors = Tau3MuDataset.get_coors_for_hits(entry, hit_ids[0])
             station1_coors = Tau3MuDataset.get_coors_for_hits(entry, hit_ids[1])
-
-            #print(station0_coors)
-            #print(station1_coors)
 
             edge_index = []
             for i in range(len(station0_coors)):
@@ -422,7 +418,7 @@ class Tau3MuDataset(InMemoryDataset):
                     if abs(eta0-eta1) < eta_thresh:
                         edge_index += [(hit_ids[0][i], hit_ids[1][j]), (hit_ids[1][j], hit_ids[0][i])]
        
-        elif knn_inter:
+        elif knn_inter: # TODO: Make this more efficient. Adds a lot of time to processing
             edge_index = []
             dRs = []
             idxs = []
@@ -482,7 +478,7 @@ class Tau3MuDataset(InMemoryDataset):
             station_0, station_1 = ordered_station_ids[i], ordered_station_ids[i + 1]
             inter_station_edges.append(Tau3MuDataset.get_inter_station_edges(entry, (station2hitids[station_0], station2hitids[station_1]), eta_thresh[i], knn_inter=knn_inter))
         
-        if far_station:
+        if far_station: # Edges for 1->3 and 2->4
             if len(ordered_station_ids) > 2:
             
                 for i in range(len(ordered_station_ids) - 2):
@@ -553,7 +549,7 @@ class Tau3MuDataset(InMemoryDataset):
     
         edge_features = features[edge_index[0]] - features[edge_index[1]]
         
-        if 'mu_hit_dR' in feature_names:
+        if 'mu_hit_dR' in feature_names: # TODO: Make this more efficicient
             
              eta, phi = entry['mu_hit_sim_eta'], np.deg2rad(entry['mu_hit_sim_phi'])%(2*np.pi)
              if virtual_node:
@@ -692,11 +688,11 @@ class Tau3MuDataset(InMemoryDataset):
         
         entry['n_mu_hit'] = endcap_idx.sum().item()
         
-        if entry['n_mu_hit'] < 1:
+        if entry['n_mu_hit'] < 1: # Only return an entry if it has hits left
             return None
         
-        if masked_entry['y'] == 1:
-            if ((masked_entry['gen_tau_eta'] * entry['mu_hit_sim_eta']) > 0).sum() == entry['n_mu_hit']:
+        if masked_entry['y'] == 1: # If signal event, only return hits on tau endcap
+            if ((masked_entry['gen_tau_eta'] * entry['mu_hit_sim_eta']) > 0).sum() == entry['n_mu_hit']: 
                 return entry
         else:
             return entry
@@ -711,7 +707,7 @@ class Tau3MuDataset(InMemoryDataset):
 
         masked_entry = {'n_mu_hit': mask.sum()}
         
-        if not(mask.sum() >= n_hits_min):
+        if not(mask.sum() >= n_hits_min): # Only return an entry if it has hits left
             return None
         
         for k in entry._fields:
