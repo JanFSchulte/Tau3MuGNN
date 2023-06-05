@@ -43,7 +43,7 @@ Now we should be at the `base` environment. Type `python`, we shall see a versio
 
 First, create a conda environment and activate it.
 ```
-conda create --name tau3mu python=3.9
+conda create --p ./tau3mu python=3.9
 conda activate tau3mu
 ```
 
