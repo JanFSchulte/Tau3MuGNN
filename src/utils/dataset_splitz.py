@@ -203,7 +203,7 @@ class Tau3MuDataset(InMemoryDataset):
                     assert 'GNN_full' in self.setting
                     data = self._process_one_entry(masked_entry)
                     data_list.append(data)
-        
+            
         for i in range(2):
             idx_split = Tau3MuDataset.get_idx_split(data_list[i], self.splits, self.pos_neg_ratio)
             data, slices = self.collate(data_list[i])
@@ -221,6 +221,12 @@ class Tau3MuDataset(InMemoryDataset):
         
         if 'GNN' in self.setting:
             edge_index = Tau3MuDataset.build_graph(entry, self.add_self_loops, self.radius, self.virtual_node, self.eta_thresh, self.knn, self.knn_inter) # Construct graph before min-max norm
+            
+            if entry['n_gen_tau']==1: # If signal event, only return hits on tau endcap
+                if ((entry['gen_tau_eta'] * entry['mu_hit_sim_eta']) > 0).sum() == entry['n_mu_hit']: 
+                    only_eval=False
+                else:
+                    only_eval=True
             
             for i, feature in enumerate(self.feature_names): # Min-max norm
                 entry[feature] = (entry[feature] - mins[i]) / (maxs[i] - mins[i])
@@ -613,8 +619,9 @@ class Tau3MuDataset(InMemoryDataset):
         y_dist = np.array([data.y.item() for data in data_list])
         only_eval = np.array([data.only_eval for data in data_list])
 
-        pos_idx = np.argwhere((y_dist == 1)).reshape(-1)
-        neg_idx = np.argwhere((y_dist == 0)).reshape(-1)
+        pos_idx = np.argwhere((y_dist == 1) & (~only_eval)).reshape(-1)  # if is half-detector model, do not use non-tau endcap for training
+        neg_idx = np.argwhere((y_dist == 0) & (~only_eval)).reshape(-1)
+        only_eval_idx = np.argwhere(only_eval).reshape(-1)
         
         print('Minimum pos2neg:', len(pos_idx)/len(neg_idx))
         
@@ -637,7 +644,7 @@ class Tau3MuDataset(InMemoryDataset):
 
         return {'train': np.concatenate((pos_train_idx, neg_train_idx)).tolist(),
                 'valid': np.concatenate((pos_valid_idx, neg_valid_idx)).tolist(),
-                'test': np.concatenate((pos_test_idx, neg_test_idx)).tolist()}
+                'test': np.concatenate((pos_test_idx, neg_test_idx, only_eval_idx)).tolist()}
 
     @staticmethod
     def mix(pos0, neg200, pos200, setting):
@@ -693,9 +700,11 @@ class Tau3MuDataset(InMemoryDataset):
         
         if masked_entry['y'] == 1: # If signal event, only return hits on tau endcap
             if ((masked_entry['gen_tau_eta'] * entry['mu_hit_sim_eta']) > 0).sum() == entry['n_mu_hit']: 
-                return entry
-        else:
-            return entry
+                entry['y'] = 1
+            else:
+                entry['y'] = 0
+        
+        return entry
 
     @staticmethod
     def mask_hits(entry, conditions, n_hits_min=1):
