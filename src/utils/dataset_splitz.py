@@ -78,7 +78,7 @@ class Tau3MuDataset(InMemoryDataset):
     @property
     def processed_dir(self) -> str:
         cut_id = '-' + self.cut if self.cut else ''
-        dataset_name = self.raw_file_names[0].strip('.pkl') + '_' + self.raw_file_names[1].strip('.pkl')
+        dataset_name = self.raw_file_names[0].replace('.pkl', '') + '_' + self.raw_file_names[1].replace('.pkl', '')
         return osp.join(self.root, f'processed-{self.setting}{cut_id}_{dataset_name}')
 
     @property
@@ -284,7 +284,7 @@ class Tau3MuDataset(InMemoryDataset):
         save_name = ''
         save_name += 'mix_' if 'mix' in self.setting else 'raw_'
         
-        save_name += self.raw_file_names[0].strip('.pkl') + '_' + self.raw_file_names[1].strip('.pkl') + '_'
+        save_name += self.raw_file_names[0].replace('.pkl', '') + '_' + self.raw_file_names[1].replace('.pkl', '') + '_'
         save_name += self.cut if self.cut else 'nocut'
         df_dir = self.data_dir / 'scores' / f'{save_name}'
         df_dir.mkdir(parents=True, exist_ok=True)
@@ -298,8 +298,8 @@ class Tau3MuDataset(InMemoryDataset):
         
         
         dfs = Root2Df(self.data_dir / 'raw').read_df(self.setting)
-        neg200 = dfs[self.raw_file_names[1].strip('.pkl')]
-        pos200 = dfs[self.raw_file_names[0].strip('.pkl')]
+        neg200 = dfs[self.raw_file_names[1].replace('.pkl', '')]
+        pos200 = dfs[self.raw_file_names[0].replace('.pkl', '')]
         pos0 = dfs.get('DsTau3muPU0_MTD', None)
         
         assert self.only_one_tau # Only one-tau is supported
