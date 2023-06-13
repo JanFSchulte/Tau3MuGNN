@@ -43,7 +43,7 @@ Now we should be at the `base` environment. Type `python`, we shall see a versio
 
 First, create a conda environment and activate it.
 ```
-conda create --name tau3mu python=3.9
+conda create --p ./tau3mu python=3.9
 conda activate tau3mu
 ```
 
@@ -67,8 +67,7 @@ Please note that the processed files may take up lots of disk space (5 gigabytes
 We provide `8` settings for training GNNs, and the corresponding configurations can be found in `$ProjectDir/src/configs/`. To train a GNN with a specific setting, one can do:
 
 ```
-cd ./src
-python train_gnn.py --setting [setting_name] --cuda [GPU_id] --cut [cut_id]
+python src/train_gnn_parallel.py --setting [setting_name] --cuda [GPU_id] --cut [cut_id]
 ```
 
 `GPU_id` is the id of the GPU to use. To use CPU, please set it to `-1`. `cut_id` is the id of the cut to use. Its default value is `None` and can be set to `cut1` or `cut1+2`. Note that when some cut is used, the `pos_neg_ratio` may need to be adjusted because many positive samples will be dropped.
