@@ -207,8 +207,6 @@ def main():
 
     Tau3MuGNNs(config, device, log_path, setting).train()
     
-    model_eff(log_name=log_path, setting=setting)
-    
 if __name__ == '__main__':
     import os
     os.chdir('./src')
