@@ -135,24 +135,24 @@ class Tau3MuGNNs:
         if self.config['optimizer']['resume']:
             start_epoch = load_checkpoint(self.model, self.optimizer, self.log_path, self.device)
 
-        best_val_recall = 0
-        best_test_recall = 0
-        best_test_auroc = 0
+        best_val_auc = 0
+        best_test_auc = 0
+        best_test_auc = 0
         
         best_epoch = 0
         for epoch in range(start_epoch, self.config['optimizer']['epochs'] + 1):
             self.run_one_epoch(self.data_loaders['train'], epoch, 'train')
-            valid_res = self.run_one_epoch(self.data_loaders['valid'], epoch, 'valid')
+            valid_auc = self.run_one_epoch(self.data_loaders['valid'], epoch, 'valid')[1]
             
             if epoch % self.config['eval']['test_interval'] == 0:
-                test_res = self.run_one_epoch(self.data_loaders['test'], epoch, 'test')
-                if valid_res[-1] > best_val_recall:
+                test_auc = self.run_one_epoch(self.data_loaders['test'], epoch, 'test')[1]
+                if valid_auc > best_val_auc:
                     save_checkpoint(self.model, self.optimizer, self.log_path, epoch)
-                    best_val_recall, best_test_recall, best_epoch = valid_res[-1], test_res[-1], epoch
+                    best_val_auc, best_test_auc, best_epoch = valid_auc, test_auc, epoch
 
             self.writer.add_scalar('best/best_epoch', best_epoch, epoch)
-            self.writer.add_scalar('best/best_val_recall', best_val_recall, epoch)
-            self.writer.add_scalar('best/best_test_recall', best_test_recall, epoch)
+            self.writer.add_scalar('best/best_val_auc', best_val_auc, epoch)
+            self.writer.add_scalar('best/best_test_auc', best_test_auc, epoch)
         
             print('-' * 50)
         
