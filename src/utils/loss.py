@@ -13,9 +13,8 @@ class Criterion(torch.nn.Module):
     def forward(self, inputs, targets):
 
         loss_dict = {}
+        inputs = torch.clamp(inputs, min=1e-5, max=1-1e-5)
         
-        factor = torch.where(inputs==1, -1, 1)*1e-4
-        inputs = inputs + factor
         if self.focal_loss:
             bce_loss = F.binary_cross_entropy(inputs, targets, reduction="none")
             p_t = inputs * targets + (1 - inputs) * (1 - targets)
