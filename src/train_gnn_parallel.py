@@ -34,8 +34,10 @@ class Tau3MuGNNs:
         
         self.model = Model(x_dim, edge_attr_dim, config['data']['virtual_node'], config['model'])
         self.model.to(self.device)
-        
-        self.model = DataParallel(self.model, device_ids=[0,1])
+        num_gpus = torch.cuda.device_count()
+        print(f'Training on {num_gpus} GPUs')
+        self.model = DataParallel(self.model, device_ids=[i for i in range(num_gpus)])
+            
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=config['optimizer']['lr'])
         self.criterion = Criterion(config['optimizer'])
         self.node_clf = config['data'].get('node_clf', False)
