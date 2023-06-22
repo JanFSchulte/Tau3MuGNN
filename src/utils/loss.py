@@ -11,8 +11,13 @@ class Criterion(torch.nn.Module):
         self.gamma = optimizer_config['focal_gamma']
 
     def forward(self, inputs, targets):
-        inputs += 1e-3
+
         loss_dict = {}
+        
+        print(inputs)
+        factor = torch.where(inputs==1, -1, 1)*1e-4
+        inputs = inputs + factor
+        print(inputs)
         if self.focal_loss:
             bce_loss = F.binary_cross_entropy(inputs, targets, reduction="none")
             p_t = inputs * targets + (1 - inputs) * (1 - targets)
