@@ -104,7 +104,7 @@ class Model(nn.Module):
 
     def forward(self, data, edge_atten=None, node_atten=None, node_clf=False):
         x, edge_index, edge_attr, batch, ptr = data.x, data.edge_index, data.edge_attr, data.batch, data.ptr # Unpack element of DataListParallel
-        print(ptr)
+
         v_idx, v_emb = (ptr[1:] - 1, []) if self.virtual_node else (None, None)
         #x = self.input_drop(x)
         #edge_attr = self.input_drop(edge_attr)
