@@ -615,9 +615,13 @@ class Tau3MuDataset(InMemoryDataset):
         if 'mu_hit_nlog_phi' in feature_names:
             
             phi = entry['mu_hit_sim_phi'] 
+            if per_station_virtual_node:
+                phi = np.concatenate((phi, [0 for i in range(max(entry['mu_hit_station']))]))
+                
             if virtual_node:
                 phi = np.append(phi,0)
             
+                
             dphi = np.abs( phi[edge_index[0]] - phi[edge_index[1]] ) + 1e-7
             nlog = -np.log(dphi)
             
@@ -626,6 +630,10 @@ class Tau3MuDataset(InMemoryDataset):
         if 'mu_hit_nlog_eta' in feature_names:
             
             eta = entry['mu_hit_sim_eta'] 
+            
+            if per_station_virtual_node:
+                eta = np.concatenate((eta, [0 for i in range(max(entry['mu_hit_station']))]))
+                
             if virtual_node:
                 eta = np.append(eta,0)
             
