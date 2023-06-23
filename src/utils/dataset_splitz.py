@@ -41,6 +41,9 @@ class Tau3MuDataset(InMemoryDataset):
         self.n_hits_min = data_config.get('n_hits_min', 1)
         self.n_hits_max = data_config.get('n_hits_max', np.inf)
         
+        global per_station_virtual_node
+        per_station_virtual_node = data_config.get('per_station_virtual_node', False)
+        
         global signal_dataset ## TODO: Figure out a way to not require these being global variables
         global bkg_dataset
         global far_station
@@ -234,6 +237,7 @@ class Tau3MuDataset(InMemoryDataset):
             
             edge_attr = Tau3MuDataset.get_edge_features(entry, edge_index, self.edge_feature_names, self.virtual_node)
             x = Tau3MuDataset.get_node_features(entry, self.node_feature_names, self.virtual_node)
+            
             
             y = torch.tensor(entry['y']).float().view(-1, 1)
             
@@ -468,12 +472,23 @@ class Tau3MuDataset(InMemoryDataset):
     def build_graph(entry, add_self_loops, radius, virtual_node, eta_thresh, knn, knn_inter):
         station2hitids = Tau3MuDataset.groupby_station(entry['mu_hit_station'])
         
-        
         intra_station_edges = []
         for i, hit_id in enumerate(station2hitids.values()):
-            intra_station_edges.append(Tau3MuDataset.get_intra_station_edges(entry, hit_id, radius=radius[i], knn=knn))
-    
+            real_edges = Tau3MuDataset.get_intra_station_edges(entry, hit_id, radius=radius[i], knn=knn)
+            
+            if per_station_virtual_node:
+                virtual_node_id = entry['n_mu_hit'] + (i)
+                
+                virtual_edges = Tau3MuDataset.get_virtual_edges(virtual_node_id, hit_id)
+                virtual_edges = torch.tensor(virtual_edges).T if len(virtual_edges) != 0 else torch.tensor([]).reshape(2, -1)
+                
+                intra_station_edges.append(torch.cat((real_edges, virtual_edges), dim=1))
+            else:
+                intra_station_edges.append(real_edges)
+                
+        
         intra_station_edges = torch.cat(intra_station_edges, dim=1) if len(intra_station_edges) != 0 else torch.tensor([]).reshape(2, -1)
+
         # assert torch_geometric.utils.coalesce(intra_station_edges).shape == intra_station_edges.shape
 
         # We cannot simply iterate four stations since many samples do not hit all the four stations.
@@ -494,7 +509,7 @@ class Tau3MuDataset(InMemoryDataset):
         inter_station_edges = torch.cat(inter_station_edges, dim=1) if len(inter_station_edges) != 0 else torch.tensor([]).reshape(2, -1)
         # assert torch_geometric.utils.coalesce(inter_station_edges).shape == inter_station_edges.shape
 
-        virtual_node_id = entry['n_mu_hit']
+        virtual_node_id = entry['n_mu_hit'] + max(entry['mu_hit_station']) if per_station_virtual_node else entry['n_mu_hit']
         real_node_ids = [i for i in range(virtual_node_id)]
         virtual_edges = Tau3MuDataset.get_virtual_edges(virtual_node_id, real_node_ids)
         virtual_edges = torch.tensor(virtual_edges).T if len(virtual_edges) != 0 else torch.tensor([]).reshape(2, -1)
@@ -530,6 +545,11 @@ class Tau3MuDataset(InMemoryDataset):
         
         # Directly index the entry using features = entry[feature_names] is extremely slow!
         features = np.stack([entry[feature] for feature in feature_names], axis=1)
+        
+        if per_station_virtual_node:
+            for i in range(max(entry['mu_hit_station'])):
+                features = np.concatenate((features, np.zeros((1, features.shape[1]))), axis=0)
+                
         if virtual_node:
             features = np.concatenate((features, np.zeros((1, features.shape[1]))))
         return torch.tensor(features, dtype=torch.float)
@@ -549,6 +569,10 @@ class Tau3MuDataset(InMemoryDataset):
         # Directly index the entry using features = entry[feature_names] is extremely slow!
         features = np.stack([entry[feature] for feature in feature_names_copy], axis=1)
         
+        if per_station_virtual_node:
+            for i in range(max(entry['mu_hit_station'])):
+                features = np.concatenate((features, np.zeros((1, features.shape[1]))), axis=0)
+            
         if virtual_node:
             # Initialize the feature of the virtual node with all zeros.
             features = np.concatenate((features, np.zeros((1, features.shape[1]))), axis=0)
