@@ -52,7 +52,7 @@ Install dependencies:
 ```
 conda install -y pytorch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0 cudatoolkit=10.2 -c pytorch
 pip install torch-scatter==2.0.9 torch-sparse==0.6.12 torch-cluster==1.5.9 torch-spline-conv==1.2.1 torch-geometric==2.0.3 -f https://data.pyg.org/whl/torch-1.9.0+cu102.html
-pip install -r requirements.txt
+pip install -r Tau3MuGNNs/requirements.txt
 ```
 
 # Get the data
