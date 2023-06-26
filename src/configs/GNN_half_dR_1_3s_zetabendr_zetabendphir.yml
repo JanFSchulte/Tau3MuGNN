@@ -1,6 +1,6 @@
 data: #Dataset-specific options. If these change, you must delete the previous processed files.
   data_dir: ../data
-  log_dir: ../data/normed_data_logs # Be careful to change this
+  log_dir: ../data/logs # Be careful to change this
   signal_dataset: 'DSTau3Mu_pCut1GeV_DF_2pCut2.5GeV_etaCut28_500000.pkl'
   bkg_dataset: 'MinBiasPU200_MTD.pkl'
   add_self_loops: True
