@@ -48,8 +48,6 @@ class Root2Df(object):
             self.process_root_file(self.data_dir / sample, self.signalvariables, pos_max)
 
     def read_df(self, setting):
-        if 'mix' not in setting:
-            self.signalsamples.remove('DsTau3muPU0_MTD.root')
 
         res = {}
         for sample in (self.backgroundsamples + self.signalsamples):
