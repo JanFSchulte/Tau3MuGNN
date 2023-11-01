@@ -12,9 +12,9 @@ from brevitas.quant import Int32Bias
 import brevitas.nn as qnn
 import numpy as np
 
-class Model(nn.Module):
+class ModelQAT(nn.Module):
     def __init__(self, x_dim, edge_attr_dim, virtual_node, model_config):
-        super(Model, self).__init__()
+        super(ModelQAT, self).__init__()
         self.out_channels = model_config['out_channels']
         self.n_layers = model_config['n_layers']
         self.dropout_p = model_config['dropout_p']

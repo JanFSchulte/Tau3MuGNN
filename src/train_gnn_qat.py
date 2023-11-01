@@ -5,7 +5,7 @@ from datetime import datetime
 from tqdm import tqdm
 from pathlib import Path
 
-from models import Model
+from models import ModelQAT as Model
 from utils import Criterion, Writer, log_epoch, load_checkpoint, save_checkpoint, set_seed, get_data_loaders, add_cuts_to_config
 from model_efficiency import main as model_eff
 from model_efficiency import eval_one_batch, run_one_epoch, generate_roc
