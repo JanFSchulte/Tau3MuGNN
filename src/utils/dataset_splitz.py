@@ -24,6 +24,7 @@ from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.loader import DataLoader, DataListLoader
 
 
+
 class Tau3MuDataset(InMemoryDataset):
     def __init__(self, setting, data_config, endcap, debug=False): # Instantiate relevant variables
         self.setting = setting
@@ -101,9 +102,29 @@ class Tau3MuDataset(InMemoryDataset):
         if self.debug:
             df = df.iloc[:100]
         
+        global eta
+        global phi
+        global r
+        global z
+        global theta
+        print(df.keys())
+        if 'mu_hit_global_eta' in df.keys():
+            eta = 'mu_hit_global_eta'
+            phi = 'mu_hit_global_phi'
+            r = 'mu_hit_global_r'
+            z = 'mu_hit_global_z'
+            theta = 'mu_hit_global_theta'
+        else:
+            eta = 'mu_hit_sim_eta'
+            phi = 'mu_hit_sim_phi'
+            r = 'mu_hit_sim_r'
+            z = 'mu_hit_sim_z'
+            theta = 'mu_hit_sim_theta'
+        
+        
         # Add phi transformations
-        r_copy = df['mu_hit_sim_r'].to_numpy()
-        phi_copy = df['mu_hit_sim_phi'].to_numpy()
+        r_copy = df[r].to_numpy()
+        phi_copy = df[phi].to_numpy()
         cos = []
         sin = []
         x = []
@@ -111,14 +132,14 @@ class Tau3MuDataset(InMemoryDataset):
         
         for i in range(len(r_copy)):
             
-            r = r_copy[i]
-            phi = phi_copy[i]
+            hit_r = r_copy[i]
+            hit_phi = phi_copy[i]
             
-            cos.append(np.cos(phi))
-            sin.append(np.sin(phi))
+            cos.append(np.cos(hit_phi))
+            sin.append(np.sin(hit_phi))
             
-            x.append(r*np.cos(phi))
-            y.append(r*np.sin(phi))
+            x.append(hit_r*np.cos(hit_phi))
+            y.append(hit_r*np.sin(hit_phi))
             
         df['mu_hit_sim_cosphi'] = cos
         df['mu_hit_sim_sinphi'] = sin
@@ -153,7 +174,7 @@ class Tau3MuDataset(InMemoryDataset):
             event = df.iloc[i]
             for j,feature in enumerate(self.feature_names):
                 var = event[feature]
-                endcaps = np.sign(event['mu_hit_sim_z'])
+                endcaps = np.sign(event[z])
                 
                 pos_col = var[endcaps==1]
                 neg_col = var[endcaps==-1]
@@ -215,6 +236,7 @@ class Tau3MuDataset(InMemoryDataset):
             torch.save((data, slices, idx_split), self.processed_paths[i])
 
     def _process_one_entry(self, entry, endcap=0, only_eval=False):
+        
         if endcap == 1:
             maxs = pos_maxs
             mins = pos_mins
@@ -226,7 +248,7 @@ class Tau3MuDataset(InMemoryDataset):
             edge_index = Tau3MuDataset.build_graph(entry, self.add_self_loops, self.radius, self.virtual_node, self.eta_thresh, self.knn, self.knn_inter) # Construct graph before min-max norm
             
             if entry['n_gen_tau']==1: # If signal event, only return hits on tau endcap
-                if ((entry['gen_tau_eta'] * entry['mu_hit_sim_eta']) > 0).sum() == entry['n_mu_hit']: 
+                if ((entry['gen_tau_eta'] * entry[eta]) > 0).sum() == entry['n_mu_hit']: 
                     only_eval=False
                 else:
                     only_eval=True
@@ -464,8 +486,8 @@ class Tau3MuDataset(InMemoryDataset):
     @staticmethod
     def get_coors_for_hits(entry, hit_id, virtual_node=False):
             
-        eta, phi = entry['mu_hit_sim_eta'][hit_id], np.deg2rad(entry['mu_hit_sim_phi'][hit_id])%(2*np.pi)
-        coors = torch.tensor(np.stack((eta, phi)).T)
+        hit_eta, hit_phi = entry[eta][hit_id], np.deg2rad(entry[phi][hit_id])%(2*np.pi)
+        coors = torch.tensor(np.stack((hit_eta, hit_phi)).T)
         return coors
 
     @staticmethod
@@ -581,10 +603,10 @@ class Tau3MuDataset(InMemoryDataset):
         
         if 'mu_hit_dR' in feature_names: # TODO: Make this more efficicient
             
-             eta, phi = entry['mu_hit_sim_eta'], np.deg2rad(entry['mu_hit_sim_phi'])%(2*np.pi)
+             hit_eta, hit_phi = entry[eta], np.deg2rad(entry[phi])%(2*np.pi)
              if virtual_node:
-                 eta, phi = np.append(eta, 0), np.append(phi, 0)
-             dR = (eta[edge_index[0]] - eta[edge_index[1]])**2 + (phi[edge_index[0]] - phi[edge_index[1]])**2
+                 hit_eta, hit_phi = np.append(hit_eta, 0), np.append(hit_phi, 0)
+             dR = (hit_eta[edge_index[0]] - hit_eta[edge_index[1]])**2 + (hit_phi[edge_index[0]] - hit_phi[edge_index[1]])**2
              dR = dR**0.5
              edge_features = np.concatenate((edge_features, dR.reshape(-1, 1)), axis=1)
         
@@ -614,30 +636,30 @@ class Tau3MuDataset(InMemoryDataset):
         
         if 'mu_hit_nlog_phi' in feature_names:
             
-            phi = entry['mu_hit_sim_phi'] 
+            hit_phi = entry[phi] 
             if per_station_virtual_node:
-                phi = np.concatenate((phi, [0 for i in range(max(entry['mu_hit_station']))]))
+                phi = np.concatenate((hit_phi, [0 for i in range(max(entry['mu_hit_station']))]))
                 
             if virtual_node:
-                phi = np.append(phi,0)
+                hit_phi = np.append(hit_phi,0)
             
                 
-            dphi = np.abs( phi[edge_index[0]] - phi[edge_index[1]] ) + 1e-7
+            dphi = np.abs( hit_phi[edge_index[0]] - hit_phi[edge_index[1]] ) + 1e-7
             nlog = -np.log(dphi)
             
             edge_features = np.concatenate((edge_features, nlog.reshape(-1,1)), axis=1)
         
         if 'mu_hit_nlog_eta' in feature_names:
             
-            eta = entry['mu_hit_sim_eta'] 
+            hit_eta = entry[eta] 
             
             if per_station_virtual_node:
-                eta = np.concatenate((eta, [0 for i in range(max(entry['mu_hit_station']))]))
+                hit_eta = np.concatenate((hit_eta, [0 for i in range(max(entry['mu_hit_station']))]))
                 
             if virtual_node:
-                eta = np.append(eta,0)
+                hit_eta = np.append(hit_eta,0)
             
-            deta = np.abs( eta[edge_index[0]] - eta[edge_index[1]] ) + 1e-7
+            deta = np.abs( hit_eta[edge_index[0]] - hit_eta[edge_index[1]] ) + 1e-7
             nlog = -np.log(deta)
             
             edge_features = np.concatenate((edge_features, nlog.reshape(-1,1)), axis=1)
@@ -731,7 +753,7 @@ class Tau3MuDataset(InMemoryDataset):
             return None
         
         if masked_entry['y'] == 1: # If signal event, only return hits on tau endcap
-            if ((masked_entry['gen_tau_eta'] * entry['mu_hit_sim_eta']) > 0).sum() == entry['n_mu_hit']: 
+            if ((masked_entry['gen_tau_eta'] * entry[eta]) > 0).sum() == entry['n_mu_hit']: 
                 entry['y'] = 1
             else:
                 entry['y'] = 0
