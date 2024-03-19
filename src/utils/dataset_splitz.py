@@ -327,7 +327,7 @@ class Tau3MuDataset(InMemoryDataset):
             try:
                 return pd.read_csv(df_save_path)
             except:
-                return pickle.load(df_save_path)
+                return pd.read_pickle(df_save_path)
         
         dfs = Root2Df(self.data_dir / 'raw').read_df(self.setting)
         neg200 = dfs[self.raw_file_names[1].replace('.pkl', '')]
