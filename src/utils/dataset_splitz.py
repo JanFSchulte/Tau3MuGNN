@@ -90,7 +90,7 @@ class Tau3MuDataset(InMemoryDataset):
         return ['data_pos.pt', 'data_neg.pt']
 
     def download(self):
-        print('Please put .pkl files ino $PROJECT_DIR/data/raw!')
+        print('Please put .pkl or .csv files ino $PROJECT_DIR/data/raw!')
         raise KeyboardInterrupt
 
     def process(self):
@@ -121,6 +121,10 @@ class Tau3MuDataset(InMemoryDataset):
             z = 'mu_hit_sim_z'
             theta = 'mu_hit_sim_theta'
         
+        if 'EMTF' in self.node_feature_names:
+            pt = 'EMTF_mu_pt'
+            eta = 'EMTF_mu_eta'
+            phi = 'EMTF_mu_phi'
         
         # Add phi transformations
         r_copy = df[r].to_numpy()
@@ -168,7 +172,7 @@ class Tau3MuDataset(InMemoryDataset):
         
         
         #self.feature_names = np.array(feature_names)
-        endcaps = df['mu_hit_endcap'].to_numpy()
+
         
         for i in range(len(df)):
             event = df.iloc[i]
@@ -320,8 +324,10 @@ class Tau3MuDataset(InMemoryDataset):
         df_save_path = self.get_df_save_path()
         if df_save_path.exists():
             print(f'[INFO] Loading {df_save_path}...')
-            return pd.read_pickle(df_save_path)
-        
+            try:
+                return pd.read_csv(df_save_path)
+            except:
+                return pickle.load(df_save_path)
         
         dfs = Root2Df(self.data_dir / 'raw').read_df(self.setting)
         neg200 = dfs[self.raw_file_names[1].replace('.pkl', '')]
@@ -364,7 +370,7 @@ class Tau3MuDataset(InMemoryDataset):
         
         print(f'[INFO] Concatenating pos & neg, saving to {df_save_path}...')
         df = pd.concat((pos, neg), join='outer', ignore_index=True)
-        df.to_pickle(df_save_path)
+        df.to_csv(df_save_path)
         return df
 
     def filter_samples(self, x):
@@ -738,7 +744,7 @@ class Tau3MuDataset(InMemoryDataset):
     @staticmethod
     def split_endcap(masked_entry, endcap):
         entry = {}
-        endcap_idx = masked_entry['mu_hit_endcap'] == endcap
+        endcap_idx = np.sign(masked_entry[z]) == endcap
 
         for k, v in masked_entry.items():
             if isinstance(v, np.ndarray) and 'gen' not in k and k != 'y' and 'L1' not in k:
