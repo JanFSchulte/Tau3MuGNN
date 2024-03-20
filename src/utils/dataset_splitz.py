@@ -327,7 +327,9 @@ class Tau3MuDataset(InMemoryDataset):
             try:
                 return pd.read_csv(df_save_path)
             except:
-                return pd.read_pickle(df_save_path)
+                with open(df_save_path, 'rb') as handle: 
+                    return pickle.load(df_save_path)
+    
         
         dfs = Root2Df(self.data_dir / 'raw').read_df(self.setting)
         neg200 = dfs[self.raw_file_names[1].replace('.pkl', '')]
@@ -768,7 +770,13 @@ class Tau3MuDataset(InMemoryDataset):
 
     @staticmethod
     def mask_hits(entry, conditions, n_hits_min=1):
-        mask = np.ones(entry.n_mu_hit, dtype=bool)
+        
+        try:
+            n_mu_hit = entry.n_mu_hit
+        except:
+            n_mu_hit = len(entry.mu_hit_global_eta)
+        
+        mask = np.ones(n_mu_hit, dtype=bool)
         for k, v in conditions.items():
             k = k.split('-')[1]
             assert isinstance(getattr(entry, k), np.ndarray)
@@ -782,7 +790,7 @@ class Tau3MuDataset(InMemoryDataset):
         for k in entry._fields:
             value = getattr(entry, k)
             if isinstance(value, np.ndarray) and 'gen' not in k and k != 'y' and 'L1' not in k:
-                assert value.shape[0] == entry.n_mu_hit
+                assert value.shape[0] == n_mu_hit
                 masked_entry[k] = value[mask].reshape(-1)
             else:
                 if k != 'n_mu_hit':
