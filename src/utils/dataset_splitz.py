@@ -22,14 +22,14 @@ import torch_geometric
 from torch_geometric.nn import radius_graph, knn_graph
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.loader import DataLoader, DataListLoader
-
-
+import pickle
+import multiprocessing
 
 class Tau3MuDataset(InMemoryDataset):
     def __init__(self, setting, data_config, endcap, debug=False): # Instantiate relevant variables
         self.setting = setting
         self.data_dir = Path(data_config['data_dir'])
-        self.conditions = data_config['conditions']
+        self.conditions = data_config.get('conditions', False)
         self.add_self_loops = data_config.get('add_self_loops', None)
         self.node_feature_names = data_config['node_feature_names']
         self.edge_feature_names = data_config.get('edge_feature_names', [])
@@ -87,7 +87,10 @@ class Tau3MuDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return ['data_pos.pt', 'data_neg.pt']
+        if 'half' in self.setting:
+            return ['data_pos.pt', 'data_neg.pt']
+        else:
+            return 'data.pt'
 
     def download(self):
         print('Please put .pkl or .csv files ino $PROJECT_DIR/data/raw!')
@@ -122,126 +125,169 @@ class Tau3MuDataset(InMemoryDataset):
             theta = 'mu_hit_sim_theta'
         
         if 'EMTF' in self.node_feature_names:
+            assert 'full' in self.setting, 'half detector setting is currently not supported'
             pt = 'EMTF_mu_pt'
             eta = 'EMTF_mu_eta'
             phi = 'EMTF_mu_phi'
         
-        # Add phi transformations
-        r_copy = df[r].to_numpy()
-        phi_copy = df[phi].to_numpy()
-        cos = []
-        sin = []
-        x = []
-        y = []
-        
-        for i in range(len(r_copy)):
-            
-            hit_r = r_copy[i]
-            hit_phi = phi_copy[i]
-            
-            cos.append(np.cos(hit_phi))
-            sin.append(np.sin(hit_phi))
-            
-            x.append(hit_r*np.cos(hit_phi))
-            y.append(hit_r*np.sin(hit_phi))
-            
-        df['mu_hit_sim_cosphi'] = cos
-        df['mu_hit_sim_sinphi'] = sin
-        df['mu_hit_sim_x'] = x
-        df['mu_hit_sim_y'] = y
-        
-        # TODO: Figure out how to not require these to be global.
-        global pos_maxs
-        global pos_mins
-        global neg_maxs
-        global neg_mins
-        
         self.feature_names = list(np.unique(self.node_feature_names+self.edge_feature_names))
         
-        for name in ['mu_hit_nlog_eta', 'mu_hit_nlog_phi', 'mu_hit_dist', 'mu_hit_dot']:
-            if name in self.feature_names:
-                self.feature_names.remove(name)
+        if 'mu_hit_sim_cosphi' in self.feature_names or 'mu_hit_sim_sinphi' in self.feature_names:
+            # Add phi transformations
+            r_copy = df[r].to_numpy()
+            phi_copy = df[phi].to_numpy()
+            cos = []
+            sin = []
+            x = []
+            y = []
+            
+            for i in range(len(r_copy)):
+                
+                hit_r = r_copy[i]
+                hit_phi = phi_copy[i]
+                
+                cos.append(np.cos(hit_phi))
+                sin.append(np.sin(hit_phi))
+                
+                x.append(hit_r*np.cos(hit_phi))
+                y.append(hit_r*np.sin(hit_phi))
+                
+            df['mu_hit_sim_cosphi'] = cos
+            df['mu_hit_sim_sinphi'] = sin
+            df['mu_hit_sim_x'] = x
+            df['mu_hit_sim_y'] = y
         
-        # Need separate mins/maxs for each endcap
+        # TODO: Figure out how to not require these to be global.
         
-        pos_maxs = [[] for feature in self.feature_names]
-        pos_mins = [[] for feature in self.feature_names]
-        
-        neg_maxs = [[] for feature in self.feature_names]
-        neg_mins = [[] for feature in self.feature_names]
-        
-        
-        #self.feature_names = np.array(feature_names)
-
-        
-        for i in range(len(df)):
-            event = df.iloc[i]
+        if 'half' in self.setting:
+            global pos_maxs
+            global pos_mins
+            global neg_maxs
+            global neg_mins
+            
+            for name in ['mu_hit_nlog_eta', 'mu_hit_nlog_phi', 'mu_hit_dist', 'mu_hit_dot']:
+                if name in self.feature_names:
+                    self.feature_names.remove(name)
+            
+            # Need separate mins/maxs for each endcap
+            
+            pos_maxs = [[] for feature in self.feature_names]
+            pos_mins = [[] for feature in self.feature_names]
+            
+            neg_maxs = [[] for feature in self.feature_names]
+            neg_mins = [[] for feature in self.feature_names]
+            
+            
+            #self.feature_names = np.array(feature_names)
+    
+            
+            for i in range(len(df)):
+                event = df.iloc[i]
+                for j,feature in enumerate(self.feature_names):
+                    var = event[feature]
+                    endcaps = np.sign(event[z])
+                    
+                    pos_col = var[endcaps==1]
+                    neg_col = var[endcaps==-1]
+                    
+                    if np.sum(endcaps==1) > 0:
+                        pos_maxs[j].append(np.max(pos_col))
+                        pos_mins[j].append(np.min(pos_col))
+                    
+                    if np.sum(endcaps==-1) > 0:
+                        neg_maxs[j].append(np.max(neg_col))
+                        neg_mins[j].append(np.min(neg_col))
+                        
+                        
+            pos_maxs = np.array(pos_maxs)
+            pos_maxs = np.max(pos_maxs, axis=1)
+            neg_maxs = np.array(neg_maxs)
+            neg_maxs = np.max(neg_maxs, axis=1)
+            
+            pos_mins = np.array(pos_mins)
+            pos_mins = np.min(pos_mins, axis=1)
+            neg_mins = np.array(neg_mins)
+            neg_mins = np.min(neg_mins, axis=1)
+            
+            pos_data_list = []
+            neg_data_list = []
+            data_list = [pos_data_list,neg_data_list]
+            
+        elif 'full' in self.setting:
+            
+            global full_maxs
+            global full_mins
+            
+            full_maxs = []
+            full_mins = []
+            
             for j,feature in enumerate(self.feature_names):
-                var = event[feature]
-                endcaps = np.sign(event[z])
                 
-                pos_col = var[endcaps==1]
-                neg_col = var[endcaps==-1]
-                
-                if np.sum(endcaps==1) > 0:
-                    pos_maxs[j].append(np.max(pos_col))
-                    pos_mins[j].append(np.min(pos_col))
-                
-                if np.sum(endcaps==-1) > 0:
-                    neg_maxs[j].append(np.max(neg_col))
-                    neg_mins[j].append(np.min(neg_col))
-                    
-                    
-        pos_maxs = np.array(pos_maxs)
-        pos_maxs = np.max(pos_maxs, axis=1)
-        neg_maxs = np.array(neg_maxs)
-        neg_maxs = np.max(neg_maxs, axis=1)
-        
-        pos_mins = np.array(pos_mins)
-        pos_mins = np.min(pos_mins, axis=1)
-        neg_mins = np.array(neg_mins)
-        neg_mins = np.min(neg_mins, axis=1)
-        
-        pos_data_list = []
-        neg_data_list = []
-        data_list = [pos_data_list,neg_data_list]
+                feat = df[feature].to_numpy()
+            
+                full_maxs.append(np.max(np.concatenate(feat)))
+                full_mins.append(np.min(np.concatenate(feat)))
+            
+            data_list = []
+            
         print('[INFO] Processing entries...')
+        args_agg = []
+        p = multiprocessing.Pool(64)
         
+    
         for entry in tqdm(df.itertuples(), total=len(df)):
             masked_entry = Tau3MuDataset.mask_hits(entry, self.conditions, n_hits_min=self.n_hits_min)
             if masked_entry == None: # Don't use events that don't have any hits left after the mask is applied
                 continue
             
-            for i, endcap in enumerate([1,-1]):
-                if 'half' in self.setting:
-                    entry = Tau3MuDataset.split_endcap(masked_entry, endcap)
-                    if entry == None: # Don't use an endcap that is empty
-                        continue
-                    else:
-                        # half-detector, tau and non-tau endcap
-                        data_list[i].append(self._process_one_entry(entry, endcap=endcap))
-                elif 'DT' in self.setting:
-                    entry = Tau3MuDataset.split_endcap(masked_entry, endcap)
-                    if entry == None:
-                        continue
-                    else:
-                        data = self._process_one_entry(masked_entry, endcap)
-                        data_list[i].append(data)
-                else:
-                    assert 'GNN_full' in self.setting
-                    data = self._process_one_entry(masked_entry)
-                    data_list.append(data)
             
-        for i in range(2):
-            idx_split = Tau3MuDataset.get_idx_split(data_list[i], self.splits, self.pos_neg_ratio)
-            data, slices = self.collate(data_list[i])
+            if 'GNN_full' in self.setting
+                args_agg.append(masked_entry)
+            else:
+                for i, endcap in enumerate([1,-1]):
+                    if 'half' in self.setting:
+                        entry = Tau3MuDataset.split_endcap(masked_entry, endcap)
+                        if entry == None: # Don't use an endcap that is empty
+                            continue
+                        else:
+                            # half-detector, tau and non-tau endcap
+                            data_list[i].append(self._process_one_entry(entry, endcap=endcap))
+                    elif 'DT' in self.setting:
+                        entry = Tau3MuDataset.split_endcap(masked_entry, endcap)
+                        if entry == None:
+                            continue
+                        else:
+                            data = self._process_one_entry(masked_entry, endcap)
+                            data_list[i].append(data)
+                    
+        
+        
+        if 'half' in self.setting:
+            for i in range(2):
+                idx_split = Tau3MuDataset.get_idx_split(data_list[i], self.splits, self.pos_neg_ratio)
+                data, slices = self.collate(data_list[i])
+        
+                print('[INFO] Saving data.pt...')
+                torch.save((data, slices, idx_split), self.processed_paths[i])
+                
+        elif 'full' in self.setting:
+            p.starmap_async(self._process_one_entry, args_agg, callback=(lambda x: data_list.extend(x)), error_callback=lambda x: print('Failed'))
+            p.close()
+            p.join()  
+            
+            print(data_list)
+            idx_split = Tau3MuDataset.get_idx_split(data_list, self.splits, self.pos_neg_ratio)
+            data, slices = self.collate(data_list)
     
             print('[INFO] Saving data.pt...')
-            torch.save((data, slices, idx_split), self.processed_paths[i])
+            torch.save((data, slices, idx_split), self.processed_paths)
 
     def _process_one_entry(self, entry, endcap=0, only_eval=False):
         
-        if endcap == 1:
+        if endcap == 0:
+            maxs = full_maxs
+            mins = full_mins
+        elif endcap == 1:
             maxs = pos_maxs
             mins = pos_mins
         elif endcap == -1:
@@ -251,11 +297,14 @@ class Tau3MuDataset(InMemoryDataset):
         if 'GNN' in self.setting:
             edge_index = Tau3MuDataset.build_graph(entry, self.add_self_loops, self.radius, self.virtual_node, self.eta_thresh, self.knn, self.knn_inter) # Construct graph before min-max norm
             
-            if entry['n_gen_tau']==1: # If signal event, only return hits on tau endcap
-                if ((entry['gen_tau_eta'] * entry[eta]) > 0).sum() == entry['n_mu_hit']: 
-                    only_eval=False
-                else:
-                    only_eval=True
+            if 'half' in self.setting:
+                if entry['n_gen_tau']==1: # If signal event, only return hits on tau endcap
+                    if ((entry['gen_tau_eta'] * entry[eta]) > 0).sum() == entry['n_mu_hit']: 
+                        only_eval=False
+                    else:
+                        only_eval=True
+            else:
+                only_eval = False
             
             for i, feature in enumerate(self.feature_names): # Min-max norm
                 entry[feature] = (entry[feature] - mins[i]) / (maxs[i] - mins[i])
@@ -324,11 +373,8 @@ class Tau3MuDataset(InMemoryDataset):
         df_save_path = self.get_df_save_path()
         if df_save_path.exists():
             print(f'[INFO] Loading {df_save_path}...')
-            try:
-                return pd.read_csv(df_save_path)
-            except:
-                with open(df_save_path, 'rb') as handle: 
-                    return pickle.load(df_save_path)
+            with open(df_save_path, 'rb') as handle: 
+                return pickle.load(handle)
     
         
         dfs = Root2Df(self.data_dir / 'raw').read_df(self.setting)
@@ -372,7 +418,7 @@ class Tau3MuDataset(InMemoryDataset):
         
         print(f'[INFO] Concatenating pos & neg, saving to {df_save_path}...')
         df = pd.concat((pos, neg), join='outer', ignore_index=True)
-        df.to_csv(df_save_path)
+        df.to_pickle(df_save_path)
         return df
 
     def filter_samples(self, x):
@@ -770,11 +816,21 @@ class Tau3MuDataset(InMemoryDataset):
 
     @staticmethod
     def mask_hits(entry, conditions, n_hits_min=1):
-        
         try:
             n_mu_hit = entry.n_mu_hit
         except:
             n_mu_hit = len(entry.mu_hit_global_eta)
+            
+        if conditions == False:
+            masked_entry = {'n_mu_hit': n_mu_hit}
+            for k in entry._fields:
+                value = getattr(entry, k)
+                if isinstance(value, np.ndarray):
+                    masked_entry[k] = value.reshape(-1)
+                else:
+                    if k != 'n_mu_hit':
+                        masked_entry[k] = value
+            return entry
         
         mask = np.ones(n_mu_hit, dtype=bool)
         for k, v in conditions.items():
@@ -803,7 +859,7 @@ def get_data_loaders(setting, data_config, batch_size, endcap=1):
     
     if endcap == 1:
         idx = 0
-    else:
+    elif endcap == -1:
         idx = 1
         
     dataset = Tau3MuDataset(setting, data_config, idx)
