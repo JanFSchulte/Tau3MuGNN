@@ -241,7 +241,7 @@ class Tau3MuDataset(InMemoryDataset):
                 continue
             
             
-            if 'GNN_full' in self.setting
+            if 'GNN_full' in self.setting:
                 args_agg.append(masked_entry)
             else:
                 for i, endcap in enumerate([1,-1]):
