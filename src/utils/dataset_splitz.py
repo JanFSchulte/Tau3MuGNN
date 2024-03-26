@@ -53,7 +53,7 @@ class Tau3MuDataset(InMemoryDataset):
         bkg_dataset = data_config['bkg_dataset']
         far_station = data_config.get('far_station', False)
         
-        if type(self.radius) != list: # If radius is a list, it will apply a different dR cutoff at each station
+        if type(self.radius) != list and self.radius != False: # If radius is a list, it will apply a different dR cutoff at each station
             self.radius = [self.radius for i in range(4)]
         
         self.eta_thresh = data_config.get('eta_thresh', False) 
@@ -65,6 +65,7 @@ class Tau3MuDataset(InMemoryDataset):
         self.cut = data_config.get('cut', False)
 
         self.debug = debug
+
         print(f'[INFO] Debug mode: {self.debug}')
         
         print(self.setting)
@@ -110,7 +111,7 @@ class Tau3MuDataset(InMemoryDataset):
         global r
         global z
         global theta
-        print(df.keys())
+        
         if 'mu_hit_global_eta' in df.keys():
             eta = 'mu_hit_global_eta'
             phi = 'mu_hit_global_phi'
@@ -232,17 +233,17 @@ class Tau3MuDataset(InMemoryDataset):
             
         print('[INFO] Processing entries...')
         args_agg = []
-        p = multiprocessing.Pool(64)
-        
     
         for entry in tqdm(df.itertuples(), total=len(df)):
-            masked_entry = Tau3MuDataset.mask_hits(entry, self.conditions, n_hits_min=self.n_hits_min)
+            masked_entry = self.mask_hits(entry, self.conditions, n_hits_min=self.n_hits_min)
             if masked_entry == None: # Don't use events that don't have any hits left after the mask is applied
                 continue
             
-            
+
             if 'GNN_full' in self.setting:
-                args_agg.append(masked_entry)
+                #args_agg.append(masked_entry)
+                
+                data_list.append(self._process_one_entry(masked_entry))
             else:
                 for i, endcap in enumerate([1,-1]):
                     if 'half' in self.setting:
@@ -269,18 +270,18 @@ class Tau3MuDataset(InMemoryDataset):
         
                 print('[INFO] Saving data.pt...')
                 torch.save((data, slices, idx_split), self.processed_paths[i])
-                
+        
         elif 'full' in self.setting:
-            p.starmap_async(self._process_one_entry, args_agg, callback=(lambda x: data_list.extend(x)), error_callback=lambda x: print('Failed'))
-            p.close()
-            p.join()  
+            #p = multiprocessing.Pool(64)
+            #p.starmap_async(self._process_one_entry, args_agg, callback=(lambda x: data_list.append(x)), error_callback=lambda x: print('Failed'))
+            #p.close()
+            #p.join()  
             
-            print(data_list)
             idx_split = Tau3MuDataset.get_idx_split(data_list, self.splits, self.pos_neg_ratio)
             data, slices = self.collate(data_list)
-    
+            print(self.processed_paths)
             print('[INFO] Saving data.pt...')
-            torch.save((data, slices, idx_split), self.processed_paths)
+            torch.save((data, slices, idx_split), self.processed_paths[0])
 
     def _process_one_entry(self, entry, endcap=0, only_eval=False):
         
@@ -295,8 +296,8 @@ class Tau3MuDataset(InMemoryDataset):
             mins = neg_mins
         
         if 'GNN' in self.setting:
-            edge_index = Tau3MuDataset.build_graph(entry, self.add_self_loops, self.radius, self.virtual_node, self.eta_thresh, self.knn, self.knn_inter) # Construct graph before min-max norm
-            
+            edge_index = self.build_graph(entry, self.add_self_loops, self.radius, self.virtual_node, self.eta_thresh, self.knn, self.knn_inter) # Construct graph before min-max norm
+
             if 'half' in self.setting:
                 if entry['n_gen_tau']==1: # If signal event, only return hits on tau endcap
                     if ((entry['gen_tau_eta'] * entry[eta]) > 0).sum() == entry['n_mu_hit']: 
@@ -308,7 +309,6 @@ class Tau3MuDataset(InMemoryDataset):
             
             for i, feature in enumerate(self.feature_names): # Min-max norm
                 entry[feature] = (entry[feature] - mins[i]) / (maxs[i] - mins[i])
-            
             
             edge_attr = Tau3MuDataset.get_edge_features(entry, edge_index, self.edge_feature_names, self.virtual_node)
             x = Tau3MuDataset.get_node_features(entry, self.node_feature_names, self.virtual_node)
@@ -544,18 +544,36 @@ class Tau3MuDataset(InMemoryDataset):
         coors = torch.tensor(np.stack((hit_eta, hit_phi)).T)
         return coors
 
-    @staticmethod
-    def build_graph(entry, add_self_loops, radius, virtual_node, eta_thresh, knn, knn_inter):
-        station2hitids = Tau3MuDataset.groupby_station(entry['mu_hit_station'])
+    def build_graph(self, entry, add_self_loops, radius, virtual_node, eta_thresh, knn, knn_inter):
+        
+        #### IF FULLY CONNECTED, RETURN PERMUTATION GRAPH
+
+        if radius == False:
+            node_idxs = [i for i in range(len(entry[self.node_feature_names[0]]))]
+            
+            if len(node_idxs) == 1:
+                return torch.tensor([[0],[0]])
+                
+            if virtual_node: node_idxs += [len(entry[self.node_feature_names[0]])]
+            
+            edge_index = torch.tensor(list(permutations(node_idxs, 2))).T
+            
+            if add_self_loops and edge_index.shape != (0,):
+                edge_index, _ = torch_geometric.utils.add_self_loops(edge_index)
+
+            return edge_index
+        
+        ## IF RADIUS GRAPH
+        station2hitids = self.groupby_station(entry['mu_hit_station'])
         
         intra_station_edges = []
         for i, hit_id in enumerate(station2hitids.values()):
-            real_edges = Tau3MuDataset.get_intra_station_edges(entry, hit_id, radius=radius[i], knn=knn)
+            real_edges = self.get_intra_station_edges(entry, hit_id, radius=radius[i], knn=knn)
             
             if per_station_virtual_node:
                 virtual_node_id = entry['n_mu_hit'] + (i)
                 
-                virtual_edges = Tau3MuDataset.get_virtual_edges(virtual_node_id, hit_id)
+                virtual_edges = self.get_virtual_edges(virtual_node_id, hit_id)
                 virtual_edges = torch.tensor(virtual_edges).T if len(virtual_edges) != 0 else torch.tensor([]).reshape(2, -1)
                 
                 intra_station_edges.append(torch.cat((real_edges, virtual_edges), dim=1))
@@ -585,7 +603,8 @@ class Tau3MuDataset(InMemoryDataset):
         inter_station_edges = torch.cat(inter_station_edges, dim=1) if len(inter_station_edges) != 0 else torch.tensor([]).reshape(2, -1)
         # assert torch_geometric.utils.coalesce(inter_station_edges).shape == inter_station_edges.shape
 
-        virtual_node_id = entry['n_mu_hit'] + max(entry['mu_hit_station']) if per_station_virtual_node else entry['n_mu_hit']
+        virtual_node_id = len(entry[self.node_feature_names[0]]) + max(entry['mu_hit_station']) if per_station_virtual_node else len(entry[self.node_feature_names[0]])
+        
         real_node_ids = [i for i in range(virtual_node_id)]
         virtual_edges = Tau3MuDataset.get_virtual_edges(virtual_node_id, real_node_ids)
         virtual_edges = torch.tensor(virtual_edges).T if len(virtual_edges) != 0 else torch.tensor([]).reshape(2, -1)
@@ -645,6 +664,7 @@ class Tau3MuDataset(InMemoryDataset):
         # Directly index the entry using features = entry[feature_names] is extremely slow!
         features = np.stack([entry[feature] for feature in feature_names_copy], axis=1)
         
+        
         if per_station_virtual_node:
             for i in range(max(entry['mu_hit_station'])):
                 features = np.concatenate((features, np.zeros((1, features.shape[1]))), axis=0)
@@ -652,7 +672,10 @@ class Tau3MuDataset(InMemoryDataset):
         if virtual_node:
             # Initialize the feature of the virtual node with all zeros.
             features = np.concatenate((features, np.zeros((1, features.shape[1]))), axis=0)
-    
+        
+        #print(features)
+        #print(np.shape(features))
+        #print(edge_index)
         edge_features = features[edge_index[0]] - features[edge_index[1]]
         
         if 'mu_hit_dR' in feature_names: # TODO: Make this more efficicient
@@ -791,11 +814,13 @@ class Tau3MuDataset(InMemoryDataset):
 
     @staticmethod
     def split_endcap(masked_entry, endcap):
+        
+
         entry = {}
         endcap_idx = np.sign(masked_entry[z]) == endcap
 
         for k, v in masked_entry.items():
-            if isinstance(v, np.ndarray) and 'gen' not in k and k != 'y' and 'L1' not in k:
+            if isinstance(v, np.ndarray) and 'gen' not in k and k != 'y' and 'L1' not in k and 'EMTF' not in k:
                 assert v.shape[0] == masked_entry['n_mu_hit']
                 entry[k] = v[endcap_idx]
             else:
@@ -814,13 +839,11 @@ class Tau3MuDataset(InMemoryDataset):
         
         return entry
 
-    @staticmethod
-    def mask_hits(entry, conditions, n_hits_min=1):
-        try:
-            n_mu_hit = entry.n_mu_hit
-        except:
-            n_mu_hit = len(entry.mu_hit_global_eta)
-            
+    def mask_hits(self, entry, conditions, n_hits_min=1):
+        n_mu_hit = eval(f'len(entry.{self.node_feature_names[0]})')
+        
+        if n_mu_hit == 0: return None
+        
         if conditions == False:
             masked_entry = {'n_mu_hit': n_mu_hit}
             for k in entry._fields:
@@ -830,24 +853,28 @@ class Tau3MuDataset(InMemoryDataset):
                 else:
                     if k != 'n_mu_hit':
                         masked_entry[k] = value
-            return entry
+            
+            return masked_entry
         
         mask = np.ones(n_mu_hit, dtype=bool)
         for k, v in conditions.items():
             k = k.split('-')[1]
             assert isinstance(getattr(entry, k), np.ndarray)
             mask *= eval('entry.' + k + v)
-
-        masked_entry = {'n_mu_hit': mask.sum()}
+        
+        
+        n_mu_hit = mask.sum()
+        masked_entry = {'n_mu_hit': n_mu_hit}
         
         if not(mask.sum() >= n_hits_min): # Only return an entry if it has hits left
             return None
         
         for k in entry._fields:
             value = getattr(entry, k)
-            if isinstance(value, np.ndarray) and 'gen' not in k and k != 'y' and 'L1' not in k:
-                assert value.shape[0] == n_mu_hit
-                masked_entry[k] = value[mask].reshape(-1)
+            if isinstance(value, np.ndarray) and 'gen' not in k and k != 'y' and 'L1' not in k and k != 'n_' not in k:
+                try: masked_entry[k] = value[mask].reshape(-1)
+                except:
+                    continue
             else:
                 if k != 'n_mu_hit':
                     masked_entry[k] = value
@@ -857,11 +884,11 @@ class Tau3MuDataset(InMemoryDataset):
 
 def get_data_loaders(setting, data_config, batch_size, endcap=1):
     
-    if endcap == 1:
+    if endcap == 1 or endcap==0:
         idx = 0
     elif endcap == -1:
         idx = 1
-        
+    
     dataset = Tau3MuDataset(setting, data_config, idx)
     print('Retrieving Data Loaders from:'+dataset.processed_paths[idx])
     train_loader = DataListLoader(dataset[dataset.idx_split['train']], batch_size=batch_size, shuffle=True)
