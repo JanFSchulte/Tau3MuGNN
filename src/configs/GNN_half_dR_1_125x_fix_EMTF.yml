@@ -1,8 +1,8 @@
 data: #Dataset-specific options. If these change, you must delete the previous processed files.
   data_dir: ../data
   log_dir: ../data/logs # Be careful to change this
-  signal_dataset: 'DSTau3Mu_pCut1GeV_DF_2pCut2.5GeV_etaCut28_500000.pkl'
-  bkg_dataset: 'MinBiasPU200_MTD.pkl'
+  signal_dataset: 'Tau3MuPU200_reduced_DF_2pCut2.5GeV_etaCut28_106617.pkl'
+  bkg_dataset: 'MinBiasPU200_reduced_DF.pkl'
   add_self_loops: True
   only_one_tau: True
   splits: # Fractions of data to use for training, validation, and testing
@@ -10,7 +10,8 @@ data: #Dataset-specific options. If these change, you must delete the previous p
     valid: 0.15
     test: 0.15
   pos_neg_ratio: 0.0 # Ratio of signal samples to background samples. Use 0 to use as much signal/background as possible.
-  radius: 1.0
+  radius: False
+  eta_thresh: 0.5
   node_clf: False # Keep false.
   virtual_node: True # Virtual node in graph construction
   phi_transform: False # Keep false. This transforms node-feature 'mu_hit_sim_phi' to 'mu_hit_sim_cos_phi' and 'mu_hit_sim_sin_phi'
@@ -22,21 +23,18 @@ data: #Dataset-specific options. If these change, you must delete the previous p
     3-mu_hit_type: '!=0' # Changes what detectors we use hits from. DT=0, CSC=1, RPC=2, GEM=3, ME0=4. Don't use 0
 
   node_feature_names: # Variables to use for nodes
-    - mu_hit_sim_z
-    - mu_hit_sim_eta
-    - mu_hit_bend
-    - mu_hit_sim_r
+    - EMTF_mu_pt
+    - EMTF_mu_eta
+    - EMTF_mu_phi
   edge_feature_names: # Variables to use for edges. Feature calculated as node_feature[i] - node_feature[j]
-    - mu_hit_sim_z
-    - mu_hit_sim_eta
-    - mu_hit_bend
-    - mu_hit_sim_phi
-    - mu_hit_sim_r
+    - EMTF_mu_pt
+    - EMTF_mu_eta
+    - EMTF_mu_phi
 
 model: # Model-specific options.
   bn_input: True # Apply batch-norm on the input
   n_layers: 6 # Number of hidden layers
-  out_channels: 128 # Dimension of hidden layers
+  out_channels: 256 # Dimension of hidden layers
   dropout_p: 0.1 # Dropout Probability
   readout: pool # Global readout. Keep pool for now
   norm_type: batch # Norm between layers. Keep batch for now
@@ -45,6 +43,7 @@ model: # Model-specific options.
   skip_num: 1 # Number of residual connections
   edge_atten: False # Introduce additional parameters to weight edge-features in each layer
   endcap: -1 # Choice of endcap. 1 = Positive Endcap, -1 = Negative Endcap
+  weight_bit_width: 6
   
 eval:
   test_interval: 5 # How often to evaluate on test-dataset
@@ -53,7 +52,7 @@ eval:
 optimizer: # Optimization options
   resume: False
   lr: 1.0e-3 # Learning rate of AdamW algorithm
-  batch_size: 1024 # Number of samples to use in each batch
+  batch_size: 512 # Number of samples to use in each batch
   epochs: 200 # Number of epochs to train for
   focal_loss: True # Loss function 
   focal_alpha: 0.4 # Loss function parameter
