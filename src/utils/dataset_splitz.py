@@ -17,6 +17,16 @@ try:
 except:
     from root2df import Root2Df
 
+import sys
+import os
+
+# Get the absolute path of the directory you want to add
+directory_to_add = os.path.abspath('/home/jschulte/tau3mu/Tau3MuGNNs/src/utils/')
+
+# Add the directory to sys.path
+sys.path.append(directory_to_add) 
+
+
 import torch
 import torch_geometric
 from torch_geometric.nn import radius_graph, knn_graph
@@ -70,6 +80,7 @@ class Tau3MuDataset(InMemoryDataset):
         
         print(self.setting)
         print(self.raw_file_names)
+        print (self.data_dir)
         super(Tau3MuDataset, self).__init__(root=self.data_dir)
         self.data, self.slices, self.idx_split = torch.load(self.processed_paths[endcap])
         self.x_dim = self.data.x.shape[-1]
@@ -105,58 +116,26 @@ class Tau3MuDataset(InMemoryDataset):
         
         if self.debug:
             df = df.iloc[:100]
+
+
+        global eta1
+        global phi1
+        global eta2
+        global phi2
+        global tfLayer
         
-        global eta
-        global phi
-        global r
-        global z
-        global theta
+        eta1 = 'stub_eta1'
+        phi1 = 'stub_phi1'
+        eta2 = 'stub_eta2'
+        phi2 = 'stub_phi2'
+        tfLayer = 'stub_tfLayer'
         
-        if 'mu_hit_global_eta' in df.keys():
-            eta = 'mu_hit_global_eta'
-            phi = 'mu_hit_global_phi'
-            r = 'mu_hit_global_r'
-            z = 'mu_hit_global_z'
-            theta = 'mu_hit_global_theta'
-        else:
-            eta = 'mu_hit_sim_eta'
-            phi = 'mu_hit_sim_phi'
-            r = 'mu_hit_sim_r'
-            z = 'mu_hit_sim_z'
-            theta = 'mu_hit_sim_theta'
-        
-        if 'EMTF' in self.node_feature_names:
-            assert 'full' in self.setting, 'half detector setting is currently not supported'
-            pt = 'EMTF_mu_pt'
-            eta = 'EMTF_mu_eta'
-            phi = 'EMTF_mu_phi'
+       
+        self.feature_names = self.node_feature_names
+ 
         
         self.feature_names = list(np.unique(self.node_feature_names+self.edge_feature_names))
         
-        if 'mu_hit_sim_cosphi' in self.feature_names or 'mu_hit_sim_sinphi' in self.feature_names:
-            # Add phi transformations
-            r_copy = df[r].to_numpy()
-            phi_copy = df[phi].to_numpy()
-            cos = []
-            sin = []
-            x = []
-            y = []
-            
-            for i in range(len(r_copy)):
-                
-                hit_r = r_copy[i]
-                hit_phi = phi_copy[i]
-                
-                cos.append(np.cos(hit_phi))
-                sin.append(np.sin(hit_phi))
-                
-                x.append(hit_r*np.cos(hit_phi))
-                y.append(hit_r*np.sin(hit_phi))
-                
-            df['mu_hit_sim_cosphi'] = cos
-            df['mu_hit_sim_sinphi'] = sin
-            df['mu_hit_sim_x'] = x
-            df['mu_hit_sim_y'] = y
         
         # TODO: Figure out how to not require these to be global.
         
@@ -186,7 +165,7 @@ class Tau3MuDataset(InMemoryDataset):
                 event = df.iloc[i]
                 for j,feature in enumerate(self.feature_names):
                     var = event[feature]
-                    endcaps = np.sign(event[z])
+                    endcaps = np.sign(event['stub_eta1'])
                     
                     pos_col = var[endcaps==1]
                     neg_col = var[endcaps==-1]
@@ -266,6 +245,7 @@ class Tau3MuDataset(InMemoryDataset):
         if 'half' in self.setting:
             for i in range(2):
                 idx_split = Tau3MuDataset.get_idx_split(data_list[i], self.splits, self.pos_neg_ratio)
+                print (data_list[i])
                 data, slices = self.collate(data_list[i])
         
                 print('[INFO] Saving data.pt...')
@@ -300,7 +280,7 @@ class Tau3MuDataset(InMemoryDataset):
 
             if 'half' in self.setting:
                 if entry['n_gen_tau']==1: # If signal event, only return hits on tau endcap
-                    if ((entry['gen_tau_eta'] * entry[eta]) > 0).sum() == entry['n_mu_hit']: 
+                    if ((entry['gen_tau_eta'] * entry['stub_real_eta1']) >= 0).sum() == entry['n_mu_hit']: 
                         only_eval=False
                     else:
                         only_eval=True
@@ -349,7 +329,11 @@ class Tau3MuDataset(InMemoryDataset):
     #         node_label = None
     #         if 'node_label' in entry:
     #             if y.item() == 1:
-    #                 node_label = torch.tensor(entry['node_label']).float().view(-1, 1)
+            - stub_real_eta1
+            - stub_real_eta2
+            - stub_real_phi1
+            - stub_real_phi2
+            - stub_tfLayer    #                 node_label = torch.tensor(entry['node_label']).float().view(-1, 1)
     #             else:
     #                 node_label = torch.zeros((x.shape[0], 1)).float() if not virtual_node else torch.zeros((x.shape[0] - 1, 1)).float()
     #         return Data(x=x, y=y, edge_index=edge_index, edge_attr=edge_attr, node_label=node_label)
@@ -378,8 +362,20 @@ class Tau3MuDataset(InMemoryDataset):
     
         
         dfs = Root2Df(self.data_dir / 'raw').read_df(self.setting)
+
         neg200 = dfs[self.raw_file_names[1].replace('.pkl', '')]
         pos200 = dfs[self.raw_file_names[0].replace('.pkl', '')]
+
+        neg200['stub_real_eta1'] = neg200['stub_eta1'] * 0.087
+        neg200['stub_real_eta2'] = neg200['stub_eta2'] * 0.087
+        neg200['stub_real_phi1'] = neg200['stub_phi1'] * 3.1415 / 512
+        neg200['stub_real_phi2'] = neg200['stub_phi2'] * 3.1415 / 512
+        pos200['stub_real_eta1'] = pos200['stub_eta1'] * 0.087
+        pos200['stub_real_eta2'] = pos200['stub_eta2'] * 0.087
+        pos200['stub_real_phi1'] = pos200['stub_phi1'] * 3.1415 / 512
+        pos200['stub_real_phi2'] = pos200['stub_phi2'] * 3.1415 / 512
+
+
         pos0 = dfs.get('DsTau3muPU0_MTD', None)
         
         assert self.only_one_tau # Only one-tau is supported
@@ -392,7 +388,6 @@ class Tau3MuDataset(InMemoryDataset):
             #    neg200 = neg200[neg200.n_gen_tau == 1].reset_index(drop=True)
             #except:
             #    pass
-            
         if self.cut:
             pos200 = pos200[pos200.apply(lambda x: self.filter_samples(x), axis=1)].reset_index(drop=True)
             if pos0 is not None:
@@ -540,7 +535,7 @@ class Tau3MuDataset(InMemoryDataset):
     @staticmethod
     def get_coors_for_hits(entry, hit_id, virtual_node=False):
             
-        hit_eta, hit_phi = entry[eta][hit_id], np.deg2rad(entry[phi][hit_id])%(2*np.pi)
+        hit_eta, hit_phi = entry[eta1][hit_id], np.deg2rad(entry[phi1][hit_id])%(2*np.pi)
         coors = torch.tensor(np.stack((hit_eta, hit_phi)).T)
         return coors
 
@@ -564,7 +559,7 @@ class Tau3MuDataset(InMemoryDataset):
             return edge_index
         
         ## IF RADIUS GRAPH
-        station2hitids = self.groupby_station(entry['mu_hit_station'])
+        station2hitids = self.groupby_station(entry['stub_tf_layer'])
         
         intra_station_edges = []
         for i, hit_id in enumerate(station2hitids.values()):
@@ -603,7 +598,7 @@ class Tau3MuDataset(InMemoryDataset):
         inter_station_edges = torch.cat(inter_station_edges, dim=1) if len(inter_station_edges) != 0 else torch.tensor([]).reshape(2, -1)
         # assert torch_geometric.utils.coalesce(inter_station_edges).shape == inter_station_edges.shape
 
-        virtual_node_id = len(entry[self.node_feature_names[0]]) + max(entry['mu_hit_station']) if per_station_virtual_node else len(entry[self.node_feature_names[0]])
+        virtual_node_id = len(entry[self.node_feature_names[0]]) + max(entry['stub_tf_layer']) if per_station_virtual_node else len(entry[self.node_feature_names[0]])
         
         real_node_ids = [i for i in range(virtual_node_id)]
         virtual_edges = Tau3MuDataset.get_virtual_edges(virtual_node_id, real_node_ids)
@@ -642,7 +637,7 @@ class Tau3MuDataset(InMemoryDataset):
         features = np.stack([entry[feature] for feature in feature_names], axis=1)
         
         if per_station_virtual_node:
-            for i in range(max(entry['mu_hit_station'])):
+            for i in range(max(entry['stub_tf_layer'])):
                 features = np.concatenate((features, np.zeros((1, features.shape[1]))), axis=0)
                 
         if virtual_node:
@@ -666,7 +661,7 @@ class Tau3MuDataset(InMemoryDataset):
         
         
         if per_station_virtual_node:
-            for i in range(max(entry['mu_hit_station'])):
+            for i in range(max(entry['stub_tf_layer'])):
                 features = np.concatenate((features, np.zeros((1, features.shape[1]))), axis=0)
             
         if virtual_node:
@@ -680,7 +675,7 @@ class Tau3MuDataset(InMemoryDataset):
         
         if 'mu_hit_dR' in feature_names: # TODO: Make this more efficicient
             
-             hit_eta, hit_phi = entry[eta], np.deg2rad(entry[phi])%(2*np.pi)
+             hit_eta, hit_phi = entry[eta1], np.deg2rad(entry[phi1])%(2*np.pi)
              if virtual_node:
                  hit_eta, hit_phi = np.append(hit_eta, 0), np.append(hit_phi, 0)
              dR = (hit_eta[edge_index[0]] - hit_eta[edge_index[1]])**2 + (hit_phi[edge_index[0]] - hit_phi[edge_index[1]])**2
@@ -728,7 +723,7 @@ class Tau3MuDataset(InMemoryDataset):
         
         if 'mu_hit_nlog_eta' in feature_names:
             
-            hit_eta = entry[eta] 
+            hit_eta = entry[eta1] 
             
             if per_station_virtual_node:
                 hit_eta = np.concatenate((hit_eta, [0 for i in range(max(entry['mu_hit_station']))]))
@@ -740,7 +735,7 @@ class Tau3MuDataset(InMemoryDataset):
             nlog = -np.log(deta)
             
             edge_features = np.concatenate((edge_features, nlog.reshape(-1,1)), axis=1)
-            
+        #print (edge_features)    
         return torch.tensor(edge_features, dtype=torch.float)
 
     @staticmethod
@@ -817,10 +812,9 @@ class Tau3MuDataset(InMemoryDataset):
         
 
         entry = {}
-        endcap_idx = np.sign(masked_entry[z]) == endcap
-
+        endcap_idx = np.sign(masked_entry['stub_real_eta1']) == endcap
         for k, v in masked_entry.items():
-            if isinstance(v, np.ndarray) and 'gen' not in k and k != 'y' and 'L1' not in k and 'EMTF' not in k:
+            if isinstance(v, np.ndarray) and 'gen' not in k and k != 'y' and 'L1' not in k and 'EMTF' not in k and 'Gen' not in k:
                 assert v.shape[0] == masked_entry['n_mu_hit']
                 entry[k] = v[endcap_idx]
             else:
@@ -832,7 +826,7 @@ class Tau3MuDataset(InMemoryDataset):
             return None
         
         if masked_entry['y'] == 1: # If signal event, only return hits on tau endcap
-            if ((masked_entry['gen_tau_eta'] * entry[eta]) > 0).sum() == entry['n_mu_hit']: 
+            if ((masked_entry['gen_tau_eta'] * entry['stub_real_eta1']) >= 0).sum() == entry['n_mu_hit']: 
                 entry['y'] = 1
             else:
                 entry['y'] = 0
@@ -843,8 +837,7 @@ class Tau3MuDataset(InMemoryDataset):
         n_mu_hit = eval(f'len(entry.{self.node_feature_names[0]})')
         
         if n_mu_hit == 0: return None
-        
-        if conditions == False:
+        if conditions == False or conditions == None:
             masked_entry = {'n_mu_hit': n_mu_hit}
             for k in entry._fields:
                 value = getattr(entry, k)
