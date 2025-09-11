@@ -1,5 +1,5 @@
-# Tau3MuGNNs
-This repo is to reproduce the results of Tau3MuGNNs project. Created by Siqi Miao (Georgia Tech) and updated by Benjamin Simon (Purdue).
+# Tau3MuGNN
+This repo is to reproduce the results of Tau3MuGNN project. Created by Siqi Miao (Georgia Tech) and updated by Benjamin Simon, Jan-Frederik Schulte (Purdue).
 
 # Use Gilbreth
 ## 0. connect VPN
@@ -24,8 +24,8 @@ Since our repo is private, we need to setup a ssh key for GitHub. [Here](https:/
 
 Then, clone the repo:
 ```
-git clone git@github.com:simon71701/Tau3MuGNNs.git
-cd Tau3MuGNNs
+git clone git@github.com:JanFschulte/Tau3MuGNN.git
+cd Tau3MuGNN
 ```
 
 
@@ -52,7 +52,7 @@ Install dependencies:
 ```
 conda install -y pytorch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0 cudatoolkit=10.2 -c pytorch
 pip install torch-scatter==2.0.9 torch-sparse==0.6.12 torch-cluster==1.5.9 torch-spline-conv==1.2.1 torch-geometric==2.0.3 -f https://data.pyg.org/whl/torch-1.9.0+cu102.html
-pip install -r Tau3MuGNNs/requirements.txt
+pip install -r Tau3MuGNN/requirements.txt
 ```
 
 # Get the data
