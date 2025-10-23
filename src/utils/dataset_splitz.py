@@ -71,7 +71,7 @@ class Tau3MuDataset(InMemoryDataset):
         print(self.setting)
         print(self.raw_file_names)
         super(Tau3MuDataset, self).__init__(root=self.data_dir)
-        self.data, self.slices, self.idx_split = torch.load(self.processed_paths[endcap])
+        self.data, self.slices, self.idx_split = torch.load(self.processed_paths[endcap] , weights_only=False)
         self.x_dim = self.data.x.shape[-1]
         self.edge_attr_dim = self.data.edge_attr.shape[-1] if self.edge_feature_names else 0
         print_splits(self)
