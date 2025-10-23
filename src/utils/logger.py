@@ -18,7 +18,7 @@ from itertools import product
 from matplotlib import figure
 import matplotlib.pyplot as plt
 from sklearn import metrics
-from sklearn.utils import check_matplotlib_support
+from sklearn.utils._optional_dependencies import check_matplotlib_support
 
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.tensorboard.summary import hparams

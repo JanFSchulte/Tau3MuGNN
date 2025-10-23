@@ -15,7 +15,7 @@ from itertools import permutations, product
 try:
     from .root2df import Root2Df
 except:
-    from root2df import Root2Df
+    from utils.root2df import Root2Df
 
 import torch
 import torch_geometric
@@ -124,8 +124,8 @@ class Tau3MuDataset(InMemoryDataset):
             r = 'mu_hit_sim_r'
             z = 'mu_hit_sim_z'
             theta = 'mu_hit_sim_theta'
-        
-        if 'EMTF' in self.node_feature_names:
+
+        if any('EMTF' in item for item in self.node_feature_names):
             assert 'full' in self.setting, 'half detector setting is currently not supported'
             pt = 'EMTF_mu_pt'
             eta = 'EMTF_mu_eta'
@@ -186,8 +186,9 @@ class Tau3MuDataset(InMemoryDataset):
                 event = df.iloc[i]
                 for j,feature in enumerate(self.feature_names):
                     var = event[feature]
+
                     endcaps = np.sign(event[z])
-                    
+
                     pos_col = var[endcaps==1]
                     neg_col = var[endcaps==-1]
                     
