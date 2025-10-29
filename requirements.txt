@@ -1,12 +1,11 @@
-uproot3==3.14.4
-tensorboard==2.7.0
-jupyter==1.0
-matplotlib==3.4.3
-networkx==2.6.3
-numpy==1.21.2
-PyYAML==6.0
-scikit_learn==1.0.2
-scipy==1.7.1
-tqdm==4.62.3
-seaborn==0.11.2
-protobuf==3.20.*
+numpy==1.26.4 
+torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128 
+torch-geometric==2.7.0 
+-f https://data.pyg.org/whl/torch-2.8.0+cu128.html 
+torch-scatter==2.1.2 
+torch-sparse==0.6.18 
+torch-spline-conv==1.2.2 
+torchaudio==2.8.0 
+torchvision==0.23.0 
+brevitas==0.12.1 
+torch-cluster==1.6.3 -f https://data.pyg.org/whl/torch-2.7.0+cu128.html
